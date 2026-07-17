@@ -5,7 +5,12 @@ import os
 
 from .base import EngineInfo, PiiFinding, mask_by_findings
 
-_INSTALLED = importlib.util.find_spec("google.cloud.dlp_v2") is not None
+try:
+    _INSTALLED = importlib.util.find_spec("google.cloud.dlp_v2") is not None
+except ModuleNotFoundError:
+    # find_spec importiert bei gepunkteten Namen das Parent-Paket –
+    # ohne installiertes google-cloud-dlp schlägt das fehl.
+    _INSTALLED = False
 
 
 def _configured() -> bool:
