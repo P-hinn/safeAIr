@@ -33,6 +33,11 @@ export const config = {
       name: 'redteam-service',
       prefix: '/api/redteam',
       url: process.env.REDTEAM_SERVICE_URL ?? 'http://localhost:8004'
+    },
+    {
+      name: 'orchestrator',
+      prefix: '/api/orchestrator',
+      url: process.env.ORCHESTRATOR_SERVICE_URL ?? 'http://localhost:8005'
     }
     // Neue Services hier registrieren (Muster: name, prefix, url)
   ] satisfies UpstreamService[]

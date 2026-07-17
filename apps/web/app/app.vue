@@ -3,6 +3,8 @@
     <header class="header">
       <NuxtLink to="/" class="brand">saf<span>AI</span>r</NuxtLink>
       <nav>
+        <NuxtLink to="/playground">Playground</NuxtLink>
+        <NuxtLink to="/policies">Policies</NuxtLink>
         <NuxtLink to="/">Dashboard</NuxtLink>
         <NuxtLink to="/pii">PII</NuxtLink>
         <NuxtLink to="/guardrails">Guardrails</NuxtLink>
