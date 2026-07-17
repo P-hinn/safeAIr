@@ -1,13 +1,8 @@
-FROM python:3.12-slim
+# Python 3.12 + Node 22 in einem Image (schneller als apt + NodeSource-Setup)
+FROM nikolaik/python-nodejs:python3.12-nodejs22-slim
 
-# Node.js für Promptfoo
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
- && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && npm install -g promptfoo \
- && apt-get purge -y curl gnupg && apt-get autoremove -y \
- && rm -rf /var/lib/apt/lists/*
+# Promptfoo global installieren (großes Paket – Fortschritt sichtbar halten)
+RUN npm install -g promptfoo --loglevel=info --no-audit --no-fund
 
 WORKDIR /app
 
