@@ -1,11 +1,5 @@
-"""Scanner-Engines für den Guardrails-Service.
+"""Heuristik-Scanner: leichtgewichtige Regex-/Regel-Checks ohne ML-Abhängigkeiten."""
 
-Zwei Engines, wählbar über GUARDRAILS_ENGINE:
-- "heuristic" (Default): leichtgewichtige Regex-/Regel-Checks, keine ML-Abhängigkeiten.
-- "llm-guard": nutzt protectai/llm-guard (muss in requirements.txt aktiviert sein).
-"""
-
-import os
 import re
 from dataclasses import dataclass, field
 
@@ -17,8 +11,6 @@ class ScanResult:
     triggered: list[dict] = field(default_factory=list)
     engine: str = "heuristic"
 
-
-# --- Heuristik-Engine -------------------------------------------------------
 
 _INJECTION_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("ignore_instructions", re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions", re.I)),
@@ -52,57 +44,3 @@ def heuristic_scan_prompt(text: str) -> ScanResult:
 
 def heuristic_scan_output(text: str) -> ScanResult:
     return _heuristic_scan(text, [("secrets", _SECRET_PATTERNS)])
-
-
-# --- LLM-Guard-Engine (optional) -------------------------------------------
-
-def _llm_guard_scan_prompt(text: str) -> ScanResult:
-    from llm_guard import scan_prompt
-    from llm_guard.input_scanners import PromptInjection, Secrets, Toxicity
-
-    scanners = [PromptInjection(), Secrets(), Toxicity()]
-    _, results_valid, results_score = scan_prompt(scanners, text)
-    triggered = [
-        {"category": "llm-guard", "rule": name, "score": round(score, 3)}
-        for name, (valid, score) in (
-            (n, (results_valid[n], results_score[n])) for n in results_valid
-        )
-        if not valid
-    ]
-    risk = max(results_score.values(), default=0.0)
-    return ScanResult(valid=all(results_valid.values()), risk_score=round(risk, 3), triggered=triggered, engine="llm-guard")
-
-
-def _llm_guard_scan_output(text: str) -> ScanResult:
-    from llm_guard import scan_output
-    from llm_guard.output_scanners import Sensitive, Toxicity
-
-    scanners = [Sensitive(), Toxicity()]
-    _, results_valid, results_score = scan_output(scanners, prompt="", output=text)
-    triggered = [
-        {"category": "llm-guard", "rule": name, "score": round(score, 3)}
-        for name, (valid, score) in (
-            (n, (results_valid[n], results_score[n])) for n in results_valid
-        )
-        if not valid
-    ]
-    risk = max(results_score.values(), default=0.0)
-    return ScanResult(valid=all(results_valid.values()), risk_score=round(risk, 3), triggered=triggered, engine="llm-guard")
-
-
-# --- Öffentliche API --------------------------------------------------------
-
-def get_engine_name() -> str:
-    return os.environ.get("GUARDRAILS_ENGINE", "heuristic").lower()
-
-
-def scan_prompt_text(text: str) -> ScanResult:
-    if get_engine_name() == "llm-guard":
-        return _llm_guard_scan_prompt(text)
-    return heuristic_scan_prompt(text)
-
-
-def scan_output_text(text: str) -> ScanResult:
-    if get_engine_name() == "llm-guard":
-        return _llm_guard_scan_output(text)
-    return heuristic_scan_output(text)

@@ -4,8 +4,11 @@
       <NuxtLink to="/" class="brand">saf<span>AI</span>r</NuxtLink>
       <nav>
         <NuxtLink to="/">Dashboard</NuxtLink>
-        <NuxtLink to="/pii">PII-Anonymisierung</NuxtLink>
+        <NuxtLink to="/pii">PII</NuxtLink>
         <NuxtLink to="/guardrails">Guardrails</NuxtLink>
+        <NuxtLink to="/moderation">Moderation</NuxtLink>
+        <NuxtLink to="/redteam">Red Teaming</NuxtLink>
+        <NuxtLink to="/tools">Tools</NuxtLink>
       </nav>
     </header>
     <main class="main">

@@ -23,6 +23,16 @@ export const config = {
       name: 'guardrails-service',
       prefix: '/api/guardrails',
       url: process.env.GUARDRAILS_SERVICE_URL ?? 'http://localhost:8002'
+    },
+    {
+      name: 'moderation-service',
+      prefix: '/api/moderation',
+      url: process.env.MODERATION_SERVICE_URL ?? 'http://localhost:8003'
+    },
+    {
+      name: 'redteam-service',
+      prefix: '/api/redteam',
+      url: process.env.REDTEAM_SERVICE_URL ?? 'http://localhost:8004'
     }
     // Neue Services hier registrieren (Muster: name, prefix, url)
   ] satisfies UpstreamService[]

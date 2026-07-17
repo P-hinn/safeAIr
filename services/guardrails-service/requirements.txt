@@ -1,7 +1,10 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
 pydantic>=2.9
+httpx>=0.27
 
-# Optional: volle ML-basierte Scans (lädt große Modelle beim ersten Start).
-# Aktivieren: einkommentieren + GUARDRAILS_ENGINE=llm-guard setzen.
-# llm-guard>=0.3
+# --- Optionale Engines (einkommentieren, dann via 'engine'-Parameter nutzen) ---
+# llm-guard>=0.3            # ML-Scanner, lädt Modelle beim ersten Start
+# guardrails-ai>=0.5        # + 'guardrails hub install …' für Validatoren
+# nemoguardrails>=0.11      # + NEMO_CONFIG_PATH + LLM-API-Key
+# openai-guardrails         # Achtung: Namespace-Konflikt mit guardrails-ai

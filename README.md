@@ -18,10 +18,13 @@ Plattform, um AI-Anwendungsfälle **einfacher und sicherer** umzusetzen: PII-Erk
 |---|---|---|---|
 | `apps/web` | Nuxt 4, TypeScript | 3000 | Oberfläche / Dashboard |
 | `services/gateway` | Node 22, Fastify | 8080 | API-Gateway/BFF, Routing, Health-Aggregation |
-| `services/pii-service` | Python 3.12, FastAPI, Microsoft Presidio | 8001 | PII-Erkennung & Anonymisierung (de/en) |
-| `services/guardrails-service` | Python 3.12, FastAPI (LLM Guard optional) | 8002 | Prompt-/Output-Scanning |
+| `services/pii-service` | Python, FastAPI | 8001 | PII: Presidio ✅, Scrubadub ✅, GCP DLP 🔌, AWS Comprehend 🔌 |
+| `services/guardrails-service` | Python, FastAPI | 8002 | Guardrails: Heuristik ✅, LLM Guard 🔌, Guardrails AI 🔌, NeMo 🔌, OpenAI Guardrails 🔌, Lakera 🔌 |
+| `services/moderation-service` | Python, FastAPI | 8003 | Moderation: Llama Guard 3 via Ollama 🔌 |
+| `services/redteam-service` | Python, FastAPI + Node | 8004 | Red Teaming: Promptfoo ✅, Garak 🔌 |
 
-Geplante Services (Stubs folgen): Moderation (Llama Guard), Red Teaming (Promptfoo/Garak).
+Alle Services sind Multi-Engine: pro Request wählbar (`engine`-Parameter), Status via `GET /v1/engines`.
+Vollständige Tool-Matrix inkl. Aktivierung: [docs/tools.md](docs/tools.md)
 
 ## Quickstart (Docker)
 
@@ -61,9 +64,14 @@ uvicorn app.main:app --reload --port 8002
 | Methode | Pfad | Beschreibung |
 |---|---|---|
 | GET | `/health` | Aggregierter Status aller Services |
-| POST | `/api/pii/v1/analyze` | PII im Text erkennen |
-| POST | `/api/pii/v1/anonymize` | PII im Text anonymisieren |
-| POST | `/api/guardrails/v1/scan/prompt` | Eingabe-Prompt prüfen |
+| GET | `/api/pii/v1/engines` | Verfügbare PII-Engines + Status |
+| POST | `/api/pii/v1/analyze` | PII erkennen (`engine`: presidio, scrubadub, gcp-dlp, aws-comprehend) |
+| POST | `/api/pii/v1/anonymize` | PII anonymisieren |
+| GET | `/api/guardrails/v1/engines` | Verfügbare Guardrail-Engines + Status |
+| POST | `/api/guardrails/v1/scan/prompt` | Eingabe-Prompt prüfen (`engine` wählbar) |
 | POST | `/api/guardrails/v1/scan/output` | LLM-Antwort prüfen |
+| POST | `/api/moderation/v1/moderate` | Content-Moderation (Llama Guard) |
+| GET | `/api/redteam/v1/tools` | Red-Teaming-Tools + Status |
+| POST | `/api/redteam/v1/scans` | Promptfoo-/Garak-Lauf starten |
 
 Details: [docs/architecture.md](docs/architecture.md)

@@ -19,11 +19,17 @@ services:
       GATEWAY_PORT: 8080
       PII_SERVICE_URL: http://pii-service:8001
       GUARDRAILS_SERVICE_URL: http://guardrails-service:8002
+      MODERATION_SERVICE_URL: http://moderation-service:8003
+      REDTEAM_SERVICE_URL: http://redteam-service:8004
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     depends_on:
       pii-service:
         condition: service_healthy
       guardrails-service:
+        condition: service_healthy
+      moderation-service:
+        condition: service_healthy
+      redteam-service:
         condition: service_healthy
 
   pii-service:
@@ -45,8 +51,41 @@ services:
       - "8002:8002"
     environment:
       GUARDRAILS_ENGINE: ${GUARDRAILS_ENGINE:-heuristic}
+      LAKERA_GUARD_API_KEY: ${LAKERA_GUARD_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      NEMO_CONFIG_PATH: ${NEMO_CONFIG_PATH:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  moderation-service:
+    build: ./services/moderation-service
+    ports:
+      - "8003:8003"
+    environment:
+      OLLAMA_URL: ${OLLAMA_URL:-}
+      MODERATION_MODEL: ${MODERATION_MODEL:-llama-guard3}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  redteam-service:
+    build: ./services/redteam-service
+    ports:
+      - "8004:8004"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
       interval: 10s
       timeout: 5s
       retries: 12
