@@ -1,0 +1,53 @@
+name: safair
+
+services:
+  web:
+    build: ./apps/web
+    ports:
+      - "3000:3000"
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8080}
+    depends_on:
+      gateway:
+        condition: service_started
+
+  gateway:
+    build: ./services/gateway
+    ports:
+      - "8080:8080"
+    environment:
+      GATEWAY_PORT: 8080
+      PII_SERVICE_URL: http://pii-service:8001
+      GUARDRAILS_SERVICE_URL: http://guardrails-service:8002
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      pii-service:
+        condition: service_healthy
+      guardrails-service:
+        condition: service_healthy
+
+  pii-service:
+    build: ./services/pii-service
+    ports:
+      - "8001:8001"
+    environment:
+      PII_LANGUAGES: ${PII_LANGUAGES:-en,de}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  guardrails-service:
+    build: ./services/guardrails-service
+    ports:
+      - "8002:8002"
+    environment:
+      GUARDRAILS_ENGINE: ${GUARDRAILS_ENGINE:-heuristic}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s

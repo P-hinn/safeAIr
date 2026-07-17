@@ -1,0 +1,22 @@
+# Node
+node_modules/
+.nuxt/
+.output/
+dist/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Env & IDE
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+
+# Optional: volle ML-basierte Scans (lädt große Modelle beim ersten Start).
+# Aktivieren: einkommentieren + GUARDRAILS_ENGINE=llm-guard setzen.
+# llm-guard>=0.3
