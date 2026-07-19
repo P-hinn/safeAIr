@@ -1,5 +1,14 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const {
+  processes,
+  totalSteps,
+  aiEnabledSteps,
+  coverage,
+  assignedToolIds,
+  openHighRisks,
+  findTool
+} = useProcessMap()
 
 interface HealthResponse {
   status: string
@@ -10,35 +19,335 @@ const { data, error, refresh, status } = await useFetch<HealthResponse>(
   `${config.public.apiBase}/health`,
   { server: false, lazy: true }
 )
+
+const today = new Intl.DateTimeFormat('de-DE', {
+  weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+}).format(new Date())
+
+const governanceScore = computed(() => {
+  const steps = processes.value.flatMap((process) => process.steps)
+  if (!steps.length) return 0
+  const controlled = steps.filter((step) => step.control.trim().length > 12).length
+  const highRiskSteps = steps.filter((step) => step.risk === 'high')
+  const protectedHighRisks = highRiskSteps.filter((step) => step.humanApproval).length
+  const controlScore = controlled / steps.length
+  const approvalScore = highRiskSteps.length ? protectedHighRisks / highRiskSteps.length : 1
+  return Math.round((controlScore * 0.55 + approvalScore * 0.45) * 100)
+})
+
+const onlineServices = computed(() => {
+  if (!data.value?.services) return 0
+  return Object.values(data.value.services).filter((service) => service.status === 'ok').length
+})
+
+const totalServices = computed(() => Object.keys(data.value?.services ?? {}).length)
+
+const processCoverage = (process: (typeof processes.value)[number]) => {
+  if (!process.steps.length) return 0
+  return Math.round(process.steps.filter((step) => step.toolIds.length).length / process.steps.length * 100)
+}
+
+const processToolCount = (process: (typeof processes.value)[number]) =>
+  new Set(process.steps.flatMap((step) => step.toolIds)).size
+
+const attentionItems = computed(() => {
+  const items: { level: 'high' | 'medium' | 'info'; title: string; detail: string; processId: string }[] = []
+
+  for (const issue of openHighRisks.value.slice(0, 2)) {
+    items.push({
+      level: 'high',
+      title: `Governance-Lücke: ${issue.step.title}`,
+      detail: `${issue.process.name} · Kritischer Schritt ohne vollständige Tool-Abdeckung.`,
+      processId: issue.process.id
+    })
+  }
+
+  const pilotAssignments = processes.value.flatMap((process) => process.steps.flatMap((step) =>
+    step.toolIds
+      .map(findTool)
+      .filter((tool) => tool?.status === 'pilot' && step.risk === 'high')
+      .map((tool) => ({ process, step, tool }))
+  ))
+
+  if (pilotAssignments[0]) {
+    items.push({
+      level: 'medium',
+      title: `${pilotAssignments[0].tool?.name} in kritischem Prozess`,
+      detail: `${pilotAssignments[0].process.name} · Pilotstatus vor Produktivfreigabe prüfen.`,
+      processId: pilotAssignments[0].process.id
+    })
+  }
+
+  if (!items.length) {
+    items.push({
+      level: 'info',
+      title: 'Keine akuten Handlungsfelder',
+      detail: 'Alle kritischen Prozessschritte verfügen über dokumentierte Kontrollen.',
+      processId: processes.value[0]?.id ?? ''
+    })
+  }
+  return items.slice(0, 3)
+})
+
+const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : status === 'pilot' ? 'Pilot' : 'Geplant'
 </script>
 
 <template>
-  <div>
-    <h1>Dashboard</h1>
-    <p style="color: var(--muted)">Status der safAIr-Services (via Gateway).</p>
-
-    <div class="card">
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <h2 style="margin: 0">Services</h2>
-        <button :disabled="status === 'pending'" @click="refresh()">Aktualisieren</button>
+  <div class="dashboard-page">
+    <header class="page-head dashboard-head">
+      <div>
+        <p class="page-kicker">Executive Overview</p>
+        <h1>AI Governance auf einen Blick</h1>
+        <p class="page-description">Transparenz über KI-Einsatz, Prozessabdeckung und operative Risiken im gesamten Unternehmen.</p>
       </div>
+      <div class="head-actions">
+        <span class="report-date">{{ today }}</span>
+        <NuxtLink to="/process-map" class="button">
+          Prozesslandkarte ansehen
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6" /></svg>
+        </NuxtLink>
+      </div>
+    </header>
 
-      <p v-if="status === 'pending'" style="color: var(--muted)">Lade Status …</p>
-      <p v-else-if="error" style="color: var(--err)">
-        Gateway nicht erreichbar ({{ config.public.apiBase }}). Läuft <code>docker compose up</code>?
-      </p>
-      <ul v-else-if="data" style="list-style: none; padding: 0; margin-top: 1rem">
-        <li
-          v-for="(svc, name) in data.services"
-          :key="name"
-          style="display: flex; justify-content: space-between; padding: 0.6rem 0; border-top: 1px solid var(--border)"
-        >
-          <span>{{ name }}</span>
-          <span :style="{ color: svc.status === 'ok' ? 'var(--ok)' : 'var(--err)' }">
-            {{ svc.status === 'ok' ? '● online' : '● offline' }}
-          </span>
-        </li>
-      </ul>
-    </div>
+    <section class="kpi-grid" aria-label="Management-Kennzahlen">
+      <article class="kpi-card">
+        <div class="kpi-icon kpi-icon--blue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg>
+        </div>
+        <div class="kpi-content">
+          <span>Erfasste Prozesse</span>
+          <strong>{{ processes.length }}</strong>
+          <small><b>{{ processes.filter((p) => p.status === 'active').length }}</b> produktiv im Einsatz</small>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-icon kpi-icon--purple">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.5 6.5a4 4 0 0 0-5-5l2 2-3 3-2-2a4 4 0 0 0 5 5L19 17l-2 2-7.5-7.5"/></svg>
+        </div>
+        <div class="kpi-content">
+          <span>Eingesetzte KI-Tools</span>
+          <strong>{{ assignedToolIds.size }}</strong>
+          <small><b>{{ aiEnabledSteps }}</b> von {{ totalSteps }} Schritten unterstützt</small>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-icon kpi-icon--green">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 4 5v6c0 5.2 3.3 9 8 11 4.7-2 8-5.8 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <div class="kpi-content">
+          <span>Governance Score</span>
+          <strong>{{ governanceScore }}<em>/100</em></strong>
+          <small><b>Kontrollen</b> in allen Prozessen dokumentiert</small>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-icon" :class="openHighRisks.length ? 'kpi-icon--amber' : 'kpi-icon--green'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        </div>
+        <div class="kpi-content">
+          <span>Handlungsfelder</span>
+          <strong>{{ openHighRisks.length }}</strong>
+          <small v-if="openHighRisks.length"><b>Priorisierung</b> im Governance Board</small>
+          <small v-else><b>Keine</b> kritischen Lücken</small>
+        </div>
+      </article>
+    </section>
+
+    <section class="dashboard-grid">
+      <article class="card portfolio-card">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Portfolio</p>
+            <h2>Prozessabdeckung</h2>
+          </div>
+          <NuxtLink to="/process-map">Alle Prozesse <span>→</span></NuxtLink>
+        </div>
+
+        <div class="coverage-summary">
+          <div class="score-ring" :style="{ '--score': `${coverage * 3.6}deg` }">
+            <div><strong>{{ coverage }}%</strong><span>AI Coverage</span></div>
+          </div>
+          <div class="coverage-copy">
+            <h3>{{ aiEnabledSteps }} von {{ totalSteps }} Prozessschritten sind KI-unterstützt</h3>
+            <p>Zuweisung aktiver Modelle, Safety- und Monitoring-Tools über die gesamte Prozesslandschaft.</p>
+            <div class="coverage-legend">
+              <span><i class="legend-dot legend-dot--blue" /> KI-unterstützt</span>
+              <span><i class="legend-dot" /> Manuell</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="process-list">
+          <NuxtLink
+            v-for="process in processes"
+            :key="process.id"
+            :to="`/process-map?process=${process.id}`"
+            class="process-row"
+          >
+            <div class="process-avatar">{{ process.name.slice(0, 2).toUpperCase() }}</div>
+            <div class="process-main">
+              <div class="process-title-line">
+                <strong>{{ process.name }}</strong>
+                <span class="status-pill" :class="process.status === 'active' ? 'status-ok' : process.status === 'pilot' ? 'status-warn' : 'status-neutral'">{{ statusLabel(process.status) }}</span>
+              </div>
+              <div class="progress-line"><span :style="{ width: `${processCoverage(process)}%` }" /></div>
+            </div>
+            <div class="process-stat"><strong>{{ processCoverage(process) }}%</strong><span>Abdeckung</span></div>
+            <div class="process-stat"><strong>{{ processToolCount(process) }}</strong><span>Tools</span></div>
+            <svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+          </NuxtLink>
+        </div>
+      </article>
+
+      <aside class="right-column">
+        <article class="card attention-card">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker section-kicker--attention">Management Attention</p>
+              <h2>Offene Punkte</h2>
+            </div>
+            <span class="attention-count">{{ attentionItems.length }}</span>
+          </div>
+
+          <div class="attention-list">
+            <NuxtLink
+              v-for="item in attentionItems"
+              :key="item.title"
+              :to="`/process-map?process=${item.processId}`"
+              class="attention-item"
+            >
+              <span class="attention-marker" :class="`attention-marker--${item.level}`">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path v-if="item.level === 'info'" d="M12 8h.01M11 12h1v4h1"/><path v-else d="M12 8v5M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg>
+              </span>
+              <span><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></span>
+              <span class="attention-arrow">→</span>
+            </NuxtLink>
+          </div>
+        </article>
+
+        <article class="card system-card">
+          <div class="system-head">
+            <div>
+              <p class="section-kicker">Plattformstatus</p>
+              <h2>Safety Services</h2>
+            </div>
+            <button class="refresh-button" :disabled="status === 'pending'" aria-label="Status aktualisieren" @click="refresh()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8.1 8.1 0 1 0 2 5.3M20 4v7h-7"/></svg>
+            </button>
+          </div>
+          <div v-if="error" class="system-state system-state--error"><span /> Gateway nicht erreichbar</div>
+          <div v-else-if="status === 'pending'" class="system-state"><span class="pulse" /> Status wird geladen …</div>
+          <div v-else class="system-state system-state--ok"><span /> {{ onlineServices }} von {{ totalServices }} Services online</div>
+          <p>Technische Detailansicht und einzelne Kontrollen sind unter „Kontrollen & Tests“ verfügbar.</p>
+        </article>
+      </aside>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.dashboard-head { align-items: center; }
+.head-actions { display: flex; align-items: center; gap: 17px; }
+.report-date { color: var(--muted); font-size: 11.5px; text-transform: capitalize; }
+.button svg { width: 15px; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.kpi-card { min-width: 0; min-height: 133px; padding: 21px; display: flex; align-items: flex-start; gap: 15px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); }
+.kpi-icon { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 11px; }
+.kpi-icon svg { width: 21px; }
+.kpi-icon--blue { color: var(--accent); background: var(--accent-soft); }
+.kpi-icon--purple { color: var(--purple); background: var(--purple-soft); }
+.kpi-icon--green { color: var(--ok); background: var(--ok-soft); }
+.kpi-icon--amber { color: var(--warn); background: var(--warn-soft); }
+.kpi-content { min-width: 0; display: flex; flex-direction: column; }
+.kpi-content > span { margin-bottom: 5px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.kpi-content > strong { color: var(--text); font-family: 'Manrope', sans-serif; font-size: 28px; line-height: 1.15; letter-spacing: -1px; }
+.kpi-content > strong em { margin-left: 2px; color: var(--muted-light); font-size: 12px; font-style: normal; letter-spacing: 0; }
+.kpi-content small { margin-top: 7px; color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+.kpi-content small b { color: var(--ok); font-weight: 700; }
+
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(310px, .8fr); gap: 20px; align-items: start; }
+.portfolio-card { padding: 0; overflow: hidden; }
+.section-head { padding: 21px 22px 18px; display: flex; align-items: center; justify-content: space-between; }
+.section-head h2, .system-head h2 { margin: 2px 0 0; font-size: 17px; }
+.section-head > a { color: var(--accent); font-size: 11.5px; font-weight: 700; text-decoration: none; }
+.section-head > a span { margin-left: 4px; }
+.section-kicker { margin: 0; color: var(--muted-light); font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.section-kicker--attention { color: var(--warn); }
+
+.coverage-summary { min-height: 164px; margin: 0 22px 8px; padding: 21px 24px; display: flex; align-items: center; gap: 26px; border: 1px solid #dbe5f2; border-radius: 12px; background: linear-gradient(125deg, #f6f9ff, #fbfcff); }
+.score-ring { --score: 0deg; width: 105px; height: 105px; flex: 0 0 auto; padding: 8px; border-radius: 50%; background: conic-gradient(var(--accent) var(--score), #e4eaf3 0); }
+.score-ring > div { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 1px #edf1f7; }
+.score-ring strong { font-family: 'Manrope', sans-serif; font-size: 23px; letter-spacing: -1px; }
+.score-ring span { margin-top: 2px; color: var(--muted); font-size: 8.5px; font-weight: 700; text-transform: uppercase; }
+.coverage-copy h3 { margin: 0 0 7px; font-size: 14px; letter-spacing: -0.2px; }
+.coverage-copy p { max-width: 520px; margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+.coverage-legend { margin-top: 15px; display: flex; gap: 18px; color: var(--muted); font-size: 9.5px; font-weight: 600; }
+.legend-dot { width: 7px; height: 7px; display: inline-block; margin-right: 5px; border-radius: 50%; background: #d5dce7; }
+.legend-dot--blue { background: var(--accent); }
+
+.process-list { padding: 7px 22px 13px; }
+.process-row { min-height: 68px; display: flex; align-items: center; gap: 13px; border-top: 1px solid var(--border); text-decoration: none; transition: background 150ms; }
+.process-row:hover { margin: 0 -10px; padding: 0 10px; border-radius: 9px; background: var(--surface-soft); }
+.process-avatar { width: 35px; height: 35px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 9px; background: #eef3fa; color: #53637a; font-size: 9px; font-weight: 800; }
+.process-main { min-width: 0; flex: 1; }
+.process-title-line { display: flex; align-items: center; gap: 8px; }
+.process-title-line > strong { overflow: hidden; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.process-title-line .status-pill { padding: 3px 6px; font-size: 8px; }
+.process-title-line .status-pill::before { width: 4px; height: 4px; }
+.progress-line { height: 4px; margin-top: 8px; overflow: hidden; border-radius: 2px; background: #e9edf3; }
+.progress-line span { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #69a1ff); }
+.process-stat { width: 58px; display: flex; flex-direction: column; align-items: flex-end; }
+.process-stat strong { font-size: 11px; }
+.process-stat span { margin-top: 2px; color: var(--muted-light); font-size: 8.5px; }
+.row-arrow { width: 15px; color: #9ca8b8; }
+
+.right-column { display: grid; gap: 20px; }
+.attention-card { padding: 0; overflow: hidden; }
+.attention-count { min-width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; background: var(--warn-soft); color: var(--warn); font-size: 10px; font-weight: 800; }
+.attention-list { padding: 0 20px 12px; }
+.attention-item { min-height: 72px; display: flex; align-items: center; gap: 11px; border-top: 1px solid var(--border); text-decoration: none; }
+.attention-item > span:nth-child(2) { min-width: 0; flex: 1; }
+.attention-item strong { display: block; font-size: 10.5px; line-height: 1.35; }
+.attention-item small { margin-top: 4px; display: block; color: var(--muted); font-size: 9.5px; line-height: 1.4; }
+.attention-marker { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 8px; }
+.attention-marker svg { width: 15px; }
+.attention-marker--high { color: var(--err); background: var(--err-soft); }
+.attention-marker--medium { color: var(--warn); background: var(--warn-soft); }
+.attention-marker--info { color: var(--ok); background: var(--ok-soft); }
+.attention-arrow { color: #a9b2c0; font-size: 14px; }
+
+.system-card { padding: 20px; }
+.system-head { display: flex; align-items: center; justify-content: space-between; }
+.refresh-button { width: 32px; min-height: 32px; padding: 0; border-color: var(--border); background: var(--surface); color: var(--muted); }
+.refresh-button:hover { border-color: var(--border-strong); background: var(--surface-soft); color: var(--text); }
+.refresh-button svg { width: 14px; }
+.system-state { margin-top: 17px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; border-radius: 8px; background: var(--surface-soft); color: var(--muted); font-size: 10.5px; font-weight: 700; }
+.system-state > span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-light); }
+.system-state--ok { color: var(--ok); background: var(--ok-soft); }
+.system-state--ok > span { background: var(--ok); }
+.system-state--error { color: var(--err); background: var(--err-soft); }
+.system-state--error > span { background: var(--err); }
+.system-card > p { margin: 12px 2px 0; color: var(--muted); font-size: 9.5px; line-height: 1.55; }
+
+@media (max-width: 1220px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .right-column { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 720px) {
+  .dashboard-head { align-items: flex-start; }
+  .head-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .report-date { order: 2; text-align: center; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .kpi-card { min-height: 112px; }
+  .right-column { grid-template-columns: 1fr; }
+  .coverage-summary { padding: 18px; align-items: flex-start; flex-direction: column; }
+  .score-ring { align-self: center; }
+  .process-stat { display: none; }
+}
+</style>

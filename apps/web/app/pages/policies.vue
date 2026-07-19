@@ -182,7 +182,7 @@ const selectStyle = 'background: var(--bg); color: var(--text); border: 1px soli
       <p v-if="errorMsg" style="color: var(--err)">{{ errorMsg }}</p>
       <div style="display: flex; gap: 0.75rem; margin-top: 1.25rem">
         <button :disabled="saving" @click="save">{{ saving ? 'Speichere …' : 'Speichern' }}</button>
-        <button style="background: var(--surface); border: 1px solid var(--border)" @click="editing = null">Abbrechen</button>
+        <button class="button-secondary" @click="editing = null">Abbrechen</button>
       </div>
     </div>
   </div>

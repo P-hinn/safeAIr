@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import proxy from '@fastify/http-proxy'
 import { config } from './config.js'
+import { getMonitoringSnapshot, startMonitoring } from './monitoring.js'
 
 const app = Fastify({ logger: true })
 
@@ -36,6 +37,12 @@ app.get('/health', async () => {
   const allOk = Object.values(services).every((s) => s.status === 'ok')
   return { status: allOk ? 'ok' : 'degraded', service: 'gateway', services }
 })
+
+// Detailliertes Plattform-Monitoring: Endpunkte, Latenzen, Verlauf und AI-Inventar.
+app.get('/monitoring', async () => getMonitoringSnapshot(config.services))
+app.post('/monitoring/refresh', async () => getMonitoringSnapshot(config.services, true))
+
+startMonitoring(config.services)
 
 try {
   await app.listen({ port: config.port, host: '0.0.0.0' })
