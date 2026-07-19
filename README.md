@@ -75,3 +75,4 @@ uvicorn app.main:app --reload --port 8002
 | POST | `/api/redteam/v1/scans` | Promptfoo-/Garak-Lauf starten |
 
 Details: [docs/architecture.md](docs/architecture.md)
+# safeAIr
