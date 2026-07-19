@@ -1,0 +1,250 @@
+# DigitalOcean App Platform specification for the complete safeAIr stack.
+#
+# Create/update the app with:
+#   doctl apps create --spec .do/app.yaml --upsert
+#
+# API provider keys are intentionally not stored in Git. Add OPENAI_API_KEY,
+# ANTHROPIC_API_KEY and LAKERA_GUARD_API_KEY as encrypted runtime variables in
+# the DigitalOcean control panel when the corresponding integrations are used.
+
+name: safeair
+region: fra
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DEPLOYMENT_LIVE
+
+# Keep browser traffic on one origin. The API-related paths retain their prefix
+# because the Fastify gateway exposes /api/*, /health and /monitoring itself.
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: gateway
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /health
+      component:
+        name: gateway
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /monitoring
+      component:
+        name: gateway
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
+
+services:
+  - name: web
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./apps/web
+    dockerfile_path: ./apps/web/Dockerfile
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: NUXT_PUBLIC_API_BASE
+        value: '${APP_URL}'
+        scope: RUN_TIME
+        type: GENERAL
+    health_check:
+      http_path: /
+      initial_delay_seconds: 20
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 8
+
+  - name: gateway
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./services/gateway
+    dockerfile_path: ./services/gateway/Dockerfile
+    http_port: 8080
+    internal_ports:
+      - 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: GATEWAY_PORT
+        value: '8080'
+        scope: RUN_TIME
+        type: GENERAL
+      - key: CORS_ORIGINS
+        value: '${APP_URL}'
+        scope: RUN_TIME
+        type: GENERAL
+      - key: PII_SERVICE_URL
+        value: http://pii-service:8001
+        scope: RUN_TIME
+        type: GENERAL
+      - key: GUARDRAILS_SERVICE_URL
+        value: http://guardrails-service:8002
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MODERATION_SERVICE_URL
+        value: http://moderation-service:8003
+        scope: RUN_TIME
+        type: GENERAL
+      - key: REDTEAM_SERVICE_URL
+        value: http://redteam-service:8004
+        scope: RUN_TIME
+        type: GENERAL
+      - key: ORCHESTRATOR_SERVICE_URL
+        value: http://orchestrator:8005
+        scope: RUN_TIME
+        type: GENERAL
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 60
+      period_seconds: 15
+      timeout_seconds: 8
+      success_threshold: 1
+      failure_threshold: 12
+
+  - name: pii-service
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./services/pii-service
+    dockerfile_path: ./services/pii-service/Dockerfile
+    internal_ports:
+      - 8001
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    envs:
+      - key: PII_LANGUAGES
+        value: en,de
+        scope: RUN_TIME
+        type: GENERAL
+    health_check:
+      http_path: /health
+      port: 8001
+      initial_delay_seconds: 90
+      period_seconds: 15
+      timeout_seconds: 8
+      success_threshold: 1
+      failure_threshold: 12
+
+  - name: guardrails-service
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./services/guardrails-service
+    dockerfile_path: ./services/guardrails-service/Dockerfile
+    internal_ports:
+      - 8002
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: GUARDRAILS_ENGINE
+        value: heuristic
+        scope: RUN_TIME
+        type: GENERAL
+    health_check:
+      http_path: /health
+      port: 8002
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 8
+
+  - name: moderation-service
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./services/moderation-service
+    dockerfile_path: ./services/moderation-service/Dockerfile
+    internal_ports:
+      - 8003
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: MODERATION_MODEL
+        value: llama-guard3
+        scope: RUN_TIME
+        type: GENERAL
+    health_check:
+      http_path: /health
+      port: 8003
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 8
+
+  - name: redteam-service
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./services/redteam-service
+    dockerfile_path: ./services/redteam-service/Dockerfile
+    internal_ports:
+      - 8004
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-1gb-fixed
+    health_check:
+      http_path: /health
+      port: 8004
+      initial_delay_seconds: 45
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 10
+
+  - name: orchestrator
+    github:
+      repo: P-hinn/safeAIr
+      branch: main
+      deploy_on_push: true
+    source_dir: ./services/orchestrator
+    dockerfile_path: ./services/orchestrator/Dockerfile
+    internal_ports:
+      - 8005
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: PII_SERVICE_URL
+        value: http://pii-service:8001
+        scope: RUN_TIME
+        type: GENERAL
+      - key: GUARDRAILS_SERVICE_URL
+        value: http://guardrails-service:8002
+        scope: RUN_TIME
+        type: GENERAL
+      - key: MODERATION_SERVICE_URL
+        value: http://moderation-service:8003
+        scope: RUN_TIME
+        type: GENERAL
+      # App Platform filesystems are ephemeral. Replace SQLite with managed
+      # persistent storage before relying on this for production data.
+      - key: DATA_DIR
+        value: /data
+        scope: RUN_TIME
+        type: GENERAL
+    health_check:
+      http_path: /health
+      port: 8005
+      initial_delay_seconds: 45
+      period_seconds: 15
+      timeout_seconds: 8
+      success_threshold: 1
+      failure_threshold: 10
