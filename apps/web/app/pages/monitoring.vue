@@ -347,4 +347,54 @@ const serviceName = (id: string) => data.value?.services.find((service) => servi
 .endpoint-filter button.active { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 .provider-card { border-radius: 0; background: transparent; }
 .model-list span { border: 1px solid var(--border); border-radius: 0; background: var(--surface-soft); }
+
+/* Readability and hierarchy: status, summaries and detail tables use distinct planes. */
+.auto-refresh { font-size: 12px; }
+.monitor-loading p, .gateway-outage p { font-size: 12px; }
+.hero-status p { color: #c3cde0; font-size: 10.5px; }
+.hero-status h2 { font-size: 21px; }
+.hero-status div > span, .timeline-label { color: #c3cde0; font-size: 11px; }
+.timeline-label strong { color: #fff; }
+.monitor-kpis { border: 1px solid var(--border-strong); background: var(--surface); }
+.monitor-kpi { min-height: 132px; padding: 22px; border-left-color: var(--border-strong); background: var(--surface); }
+.monitor-kpi:nth-child(even) { background: var(--surface-muted); }
+.monitor-kpi div > span { color: #4f4e48; font-size: 12.5px; font-weight: 650; }
+.monitor-kpi strong { font-size: 29px; }
+.monitor-kpi strong small { font-size: 12px; }
+.monitor-kpi p { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.services-card, .issues-card, .endpoints-card, .ai-card, .capabilities-card { background: var(--surface); }
+.section-head { min-height: 76px; padding: 18px 21px; border-bottom-color: var(--border-strong); background: var(--surface-soft); }
+.section-head h2 { font-size: 18px; }
+.section-kicker { color: #354dcc; font-size: 10.5px; }
+.section-meta, .capability-summary { font-size: 11px; }
+.issue-counter { min-width: 29px; height: 29px; font-size: 11px; }
+.service-list, .issue-list { background: var(--surface); }
+.service-row { min-height: 76px; }
+.service-info strong { font-size: 12.5px; }
+.service-info small { font-size: 10.5px; }
+.service-latency strong { font-size: 11.5px; }
+.service-latency small { font-size: 10px; }
+.service-row .status-pill { font-size: 10px; }
+.issue-row { min-height: 68px; padding-block: 14px; }
+.issue-row strong { font-size: 12px; }
+.issue-row p { font-size: 10.5px; line-height: 1.5; }
+.all-clear strong { font-size: 12.5px; }
+.all-clear p { font-size: 11px; }
+.endpoint-filter button { min-height: 32px; padding-inline: 10px; font-size: 10px; }
+.endpoint-row { min-height: 61px; color: #575750; font-size: 11px; }
+.endpoint-row--head { min-height: 40px; background: #dcd9d0; color: #45443f; font-size: 9.5px; }
+.endpoint-name strong { font-size: 11.5px; }
+.endpoint-name code { font-size: 10px; }
+.type-badge, .endpoint-row .status-pill { font-size: 9.5px; }
+.provider-grid, .capability-grid { background: var(--surface-muted); }
+.provider-card { min-height: 190px; padding: 18px; border-color: var(--border-strong); background: var(--surface-raised); }
+.provider-state { font-size: 10px; }
+.provider-card h3 { font-size: 14px; }
+.provider-card > p { font-size: 10.5px; line-height: 1.55; }
+.model-list span, .model-list small { font-size: 9.5px; }
+.capability-item { min-height: 88px; padding-block: 14px; border-top-color: var(--border-strong); }
+.capability-info strong { font-size: 12px; }
+.capability-info small { font-size: 10px; }
+.capability-info p { font-size: 10.5px; line-height: 1.5; }
+.capability-status { font-size: 9.5px; }
 </style>

@@ -473,4 +473,31 @@ onBeforeUnmount(() => {
 @media (max-width: 760px) { .map-kpis { grid-template-columns: 1fr; }.map-kpis article { min-height: 75px; }.map-actions { flex-direction: column; }.map-search, .map-actions select, .map-actions select:nth-child(2), .map-actions > button { width: 100%; }.relation-legend > span { display: none; }.map-shell { height: 700px; }.relation-detail { width: calc(100% - 20px); height: auto; max-height: 62%; top: auto; right: 10px; bottom: 10px; left: 10px; }.detail-process { margin-top: 12px; }.detail-arrow { height: 22px; }.detail-arrow i { height: 9px; }.visual-map-card--fullscreen .visual-map-head, .visual-map-card:fullscreen .visual-map-head { max-height: 42vh; align-items: flex-start; flex-direction: column; overflow-y: auto; }.visual-map-card--fullscreen .map-actions, .visual-map-card:fullscreen .map-actions { width: 100%; flex-direction: row; }.visual-map-card--fullscreen .map-search, .visual-map-card:fullscreen .map-search { width: 100%; flex-basis: 100%; }.visual-map-card--fullscreen .map-actions select, .visual-map-card--fullscreen .map-actions > button, .visual-map-card:fullscreen .map-actions select, .visual-map-card:fullscreen .map-actions > button { width: auto; flex: 1; } }
 .relation-detail { border-color: var(--ink); border-radius: 0; background: rgba(248,246,239,.97); box-shadow: 8px 8px 0 rgba(23,23,20,.1); }
 .visual-map-card--fullscreen, .visual-map-card:fullscreen { background: var(--paper); }
+
+/* The portfolio summary and map tools form separate, readable planes. */
+.map-kpis { border: 1px solid var(--border-strong); background: var(--surface); }
+.map-kpis article { min-height: 112px; padding: 18px; border-left-color: var(--border-strong); background: var(--surface); }
+.map-kpis article:nth-child(even) { background: var(--surface-muted); }
+.map-kpis article > div > span { color: #4f4e48; font-size: 11.5px; }
+.map-kpis small { color: var(--muted); font-size: 10px; }
+.kpi-icon { width: 42px; height: 42px; font-size: 11px; }
+.visual-map-head { min-height: 96px; padding: 18px 20px; background: var(--surface-soft); }
+.section-kicker { color: #354dcc; font-size: 10.5px; }
+.visual-map-head h2 { font-size: 20px; }
+.visual-map-head > div > span { color: #575750; font-size: 11px; }
+.map-actions select { min-height: 40px; padding-inline: 10px; font-size: 10.5px; background: var(--surface-raised); }
+.map-actions > button { min-height: 40px; font-size: 10.5px; }
+.map-search { min-height: 40px; background: var(--surface-raised); }
+.map-search input { min-height: 34px; font-size: 10.5px; background: transparent; }
+.relation-legend { min-height: 50px; padding-inline: 16px; border-bottom-color: var(--border-strong); background: #dcd9d0; }
+.relation-legend button { min-height: 32px; font-size: 9.5px; }
+.relation-legend > span { color: #55544e; font-size: 9px; }
+.map-shell, .map-loading, .map-empty { background: var(--surface-muted); }
+.map-empty strong { font-size: 14px; }
+.map-empty span { font-size: 11px; }
+.relation-detail > header span { font-size: 10px; }
+.relation-detail > header strong { font-size: 15px; }
+.detail-process small, .detail-handoff small { font-size: 9px; }
+.detail-process strong { font-size: 12px; }
+.detail-handoff strong { font-size: 11px; }
 </style>

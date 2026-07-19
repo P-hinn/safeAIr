@@ -264,11 +264,11 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
 .kpi-icon--purple { color: var(--purple); background: var(--purple-soft); }
 .kpi-icon--green { color: var(--ok); background: var(--ok-soft); }
 .kpi-icon--amber { color: var(--warn); background: var(--warn-soft); }
-.kpi-content { min-width: 0; display: flex; flex-direction: column; }
+.kpi-content { min-width: 0; display: flex; flex: 1; flex-direction: column; }
 .kpi-content > span { margin-bottom: 6px; color: #4f4e48; font-size: 13px; font-weight: 650; }
 .kpi-content > strong { color: var(--text); font-family: 'Space Grotesk', sans-serif; font-size: 32px; line-height: 1.05; letter-spacing: -1.6px; }
 .kpi-content > strong em { margin-left: 2px; color: var(--muted-light); font-size: 12px; font-style: normal; letter-spacing: 0; }
-.kpi-content small { margin-top: 8px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.kpi-content small { max-width: 30ch; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
 .kpi-content small b { color: var(--ok); font-weight: 700; }
 
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(330px, .8fr); gap: 24px; align-items: start; }

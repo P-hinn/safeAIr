@@ -1,6 +1,12 @@
 <script setup lang="ts">
 const route = useRoute()
+const config = useRuntimeConfig()
 const mobileNavOpen = ref(false)
+
+const apiDocsUrl = computed(() => {
+  const apiBase = String(config.public.apiBase || '').replace(/\/+$/, '')
+  return apiBase ? `${apiBase}/docs/` : '/docs/'
+})
 
 const navigation = [
   {
@@ -101,7 +107,7 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
         </section>
         <section class="nav-group">
           <p class="nav-group-label">Entwicklung</p>
-          <a href="/docs" class="nav-item">
+          <a :href="apiDocsUrl" class="nav-item">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" />
             </svg>

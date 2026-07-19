@@ -154,14 +154,14 @@ function nodeColor(node: Node) {
 @import '@vue-flow/controls/dist/style.css';
 @import '@vue-flow/minimap/dist/style.css';
 
-.workflow-builder { height: 590px; min-height: 480px; display: grid; grid-template-columns: 176px minmax(0, 1fr); background: #f8fafc; }
-.node-palette { z-index: 3; padding: 14px 10px; border-right: 1px solid var(--border); background: #fff; overflow-y: auto; }
-.palette-head { padding: 2px 5px 11px; display: flex; flex-direction: column; }.palette-head span { color: var(--text); font-size: 9px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }.palette-head small { margin-top: 3px; color: var(--muted-light); font-size: 7.5px; }
+.workflow-builder { height: 620px; min-height: 500px; display: grid; grid-template-columns: 205px minmax(0, 1fr); background: #f8fafc; }
+.node-palette { z-index: 3; padding: 16px 12px; border-right: 1px solid var(--border-strong); background: #fff; overflow-y: auto; }
+.palette-head { padding: 2px 5px 13px; display: flex; flex-direction: column; }.palette-head span { color: var(--text); font-size: 11px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }.palette-head small { margin-top: 4px; color: var(--muted); font-size: 10px; }
 .palette-item { width: 100%; min-height: 49px; padding: 6px 7px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; border-color: transparent; background: transparent; color: var(--text); text-align: left; }
 .palette-item:hover { border-color: var(--border); background: var(--surface-soft); color: var(--text); transform: none; }
 .palette-icon { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 7px; background: #f0f3f7; color: #64748b; }.palette-icon svg { width: 15px; }.palette-icon--trigger { color: var(--ok); background: var(--ok-soft); }.palette-icon--ai { color: var(--purple); background: var(--purple-soft); }.palette-icon--decision { color: var(--warn); background: var(--warn-soft); }.palette-icon--approval { color: var(--accent); background: var(--accent-soft); }.palette-icon--end { color: var(--err); background: var(--err-soft); }
-.palette-item > span:nth-child(2) { min-width: 0; display: flex; flex: 1; flex-direction: column; }.palette-item strong { font-size: 8.5px; }.palette-item small { margin-top: 2px; color: var(--muted); font-size: 7px; }.palette-item > i { width: 17px; height: 17px; display: grid; place-items: center; border-radius: 5px; background: #eef2f7; color: var(--muted); font-size: 11px; font-style: normal; }
-.palette-help { margin: 14px 5px 0; padding: 9px; display: flex; gap: 7px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }.palette-help svg { width: 13px; flex: 0 0 auto; }.palette-help span { font-size: 7px; line-height: 1.4; }
+.palette-item > span:nth-child(2) { min-width: 0; display: flex; flex: 1; flex-direction: column; }.palette-item strong { font-size: 11px; }.palette-item small { margin-top: 2px; color: var(--muted); font-size: 9.5px; }.palette-item > i { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 5px; background: #eef2f7; color: var(--muted); font-size: 12px; font-style: normal; }
+.palette-help { margin: 16px 5px 0; padding: 11px; display: flex; gap: 8px; border: 1px solid var(--blue); border-radius: 8px; background: var(--accent-soft); color: #354dcc; }.palette-help svg { width: 14px; flex: 0 0 auto; }.palette-help span { font-size: 9.5px; line-height: 1.5; }
 .flow-canvas { min-width: 0; position: relative; }
 .safair-flow { width: 100%; height: 100%; background: #f8fafc; }
 .safair-flow .vue-flow__node { border: 0; padding: 0; background: transparent; width: auto; box-shadow: none; }
@@ -171,7 +171,7 @@ function nodeColor(node: Node) {
 .safair-flow .vue-flow__controls { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-sm); }
 .safair-flow .vue-flow__controls-button { width: 27px; height: 27px; border-color: var(--border); color: var(--text); background: #fff; }
 .safair-flow .vue-flow__minimap { width: 125px; height: 78px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.9); box-shadow: var(--shadow-sm); }
-.canvas-tip { position: absolute; z-index: 4; top: 12px; left: 50%; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; transform: translateX(-50%); background: rgba(255,255,255,.9); color: var(--muted); font-size: 7.5px; box-shadow: var(--shadow-sm); pointer-events: none; white-space: nowrap; }
+.canvas-tip { position: absolute; z-index: 4; top: 12px; left: 50%; padding: 7px 10px; border: 1px solid var(--border-strong); border-radius: 7px; transform: translateX(-50%); background: rgba(255,254,249,.96); color: #55544e; font-size: 10px; box-shadow: var(--shadow-sm); pointer-events: none; white-space: nowrap; }
 
 @media (max-width: 800px) {
   .workflow-builder { height: 620px; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }

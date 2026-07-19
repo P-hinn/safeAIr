@@ -675,4 +675,49 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
 .create-modal { border: 1px solid var(--ink); border-radius: 0; background: var(--paper); box-shadow: 12px 12px 0 rgba(23,23,20,.14); }
 .modal-icon { border: 1px solid currentColor; border-radius: 0; background: transparent; }
 .transfer-notice { border-radius: 0; background: var(--paper); box-shadow: 8px 8px 0 rgba(23,23,20,.12); }
+
+/* Stronger information hierarchy and readable controls. */
+.process-viewbar { padding: 10px; background: var(--surface-soft); }
+.view-tabs { padding: 4px; background: var(--surface); }
+.view-tabs button { min-height: 42px; font-size: 11px; }
+.view-context { color: #5d5b55; font-size: 10.5px; }
+.view-context strong { font-size: 12px; }
+.reset-link { font-size: 10.5px; }
+.process-switcher { border-color: var(--border-strong); background: var(--surface-muted); }
+.switcher-copy span { color: #5d5b55; font-size: 10.5px; }
+.switcher-copy strong { font-size: 13px; }
+.process-tab { min-height: 47px; font-size: 12px; }
+.process-heading p { color: #c3cde0; font-size: 12.5px; }
+.process-heading > div > span { color: #c3cde0; font-size: 11px; }
+.process-classification label > span { color: #c3cde0; font-size: 9.5px; }
+.process-classification input, .process-classification select { min-height: 35px; font-size: 11px; }
+.process-metrics span { color: #c3cde0; font-size: 10.5px; }
+.map-head, .responsibility-card .section-head, .detail-head { border-bottom-color: var(--border-strong); background: var(--surface-soft); }
+.map-head h2, .detail-head h2 { font-size: 18px; }
+.map-legend { color: #55544e; font-size: 10.5px; }
+.map-insight strong { font-size: 13px; }
+.map-insight p { font-size: 11.5px; line-height: 1.55; }
+.responsibility-row { min-height: 60px; color: #55544e; font-size: 11px; }
+.responsibility-row--head { min-height: 40px; background: #dcd9d0; color: #45443f; font-size: 9.5px; }
+.responsibility-row strong { font-size: 12px; }
+.autosave { font-size: 10.5px; }
+.field > span { color: #55544e; font-size: 11px; }
+.field input, .field select, .field textarea { min-height: 40px; font-size: 12px; }
+.toggle-field strong { font-size: 11.5px; }
+.toggle-field small { font-size: 10px; }
+.assignment-head h3 { font-size: 14px; }
+.assignment-head span { font-size: 10.5px; }
+.tool-option { min-height: 58px; padding: 9px; background: var(--surface-raised); }
+.tool-logo { width: 34px; height: 34px; font-size: 9px; }
+.tool-info strong { font-size: 11.5px; }
+.tool-info small { font-size: 10px; }
+.tool-status { font-size: 9px; }
+.edge-node small { font-size: 9.5px; }
+.edge-node strong { font-size: 11px; }
+.logic-hint p { font-size: 10.5px; }
+.create-modal > p { font-size: 13px; }
+.create-modal > .field input, .modal-field-row input, .modal-field-row select,
+.relation-form-route select, .relation-type-field select, .relation-modal > .field input { font-size: 12px; }
+.transfer-notice strong { font-size: 12px; }
+.transfer-notice small { font-size: 10.5px; }
 </style>

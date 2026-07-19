@@ -69,11 +69,11 @@ const riskLabel: Record<string, string> = { low: 'Niedrig', medium: 'Mittel', hi
 
 <style scoped>
 .workflow-node {
-  width: 225px;
-  min-height: 152px;
+  width: 238px;
+  min-height: 164px;
   position: relative;
   overflow: visible;
-  border: 1px solid #dce3ed;
+  border: 1px solid rgba(23,23,20,.34);
   border-top: 3px solid #94a3b8;
   border-radius: 0;
   background: var(--surface);
@@ -88,16 +88,16 @@ const riskLabel: Record<string, string> = { low: 'Niedrig', medium: 'Mittel', hi
 .node-type-icon { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 0; background: transparent; color: var(--muted); }
 .workflow-node--trigger .node-type-icon { color: #168a5b; background: #eaf8f1; }.workflow-node--ai .node-type-icon { color: #7557d3; background: #f1edff; }.workflow-node--decision .node-type-icon { color: #d98212; background: #fff5e5; }.workflow-node--approval .node-type-icon { color: #246bfd; background: #edf3ff; }.workflow-node--end .node-type-icon { color: #d64242; background: #fff0f0; }
 .node-type-icon svg { width: 13px; }
-.node-type { color: #69778c; font-size: 7.5px; font-weight: 800; letter-spacing: .55px; text-transform: uppercase; }
-.node-risk { margin-left: auto; padding: 3px 5px; border-radius: 99px; font-size: 6.5px; font-weight: 800; }.node-risk--low { color: #168a5b; background: #eaf8f1; }.node-risk--medium { color: #d98212; background: #fff5e5; }.node-risk--high { color: #d64242; background: #fff0f0; }
+.node-type { color: #575750; font-size: 9.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+.node-risk { margin-left: auto; padding: 3px 6px; border-radius: 99px; font-size: 8.5px; font-weight: 800; }.node-risk--low { color: #168a5b; background: #eaf8f1; }.node-risk--medium { color: #d98212; background: #fff5e5; }.node-risk--high { color: #d64242; background: #fff0f0; }
 .node-body { min-height: 76px; padding: 11px 12px 8px; }
-.node-department { display: block; overflow: hidden; color: #246bfd; font-size: 7px; font-weight: 800; letter-spacing: .4px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.node-body strong { margin-top: 4px; display: block; overflow: hidden; font-family: 'Space Grotesk', sans-serif; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.node-body p { margin: 5px 0 0; display: -webkit-box; overflow: hidden; color: #69778c; font-size: 8px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.node-department { display: block; overflow: hidden; color: #354dcc; font-size: 9px; font-weight: 800; letter-spacing: .4px; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.node-body strong { margin-top: 5px; display: block; overflow: hidden; font-family: 'Space Grotesk', sans-serif; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.node-body p { margin: 6px 0 0; display: -webkit-box; overflow: hidden; color: #575750; font-size: 10px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .node-footer { min-height: 35px; padding: 6px 11px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #edf0f4; }
 .node-tools { display: flex; padding-left: 3px; }.node-tools > span, .node-tools > i { width: 21px; height: 21px; margin-left: -3px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 6px; color: #fff; font-size: 5.8px; font-style: normal; font-weight: 800; }.node-tools > i { background: #e9edf3; color: #69778c; }
-.node-no-tools { color: #95a1b3; font-size: 7.5px; }
-.human-control { display: flex; align-items: center; gap: 3px; color: #246bfd; font-size: 7px; font-weight: 700; }.human-control svg { width: 11px; }
+.node-no-tools { color: #696861; font-size: 9.5px; }
+.human-control { display: flex; align-items: center; gap: 3px; color: #354dcc; font-size: 9px; font-weight: 700; }.human-control svg { width: 12px; }
 .node-handle { width: 11px; height: 11px; border: 2px solid #fff; background: #77869b; box-shadow: 0 0 0 1px #aeb9c8; }
 .node-handle--target { left: -6px; }.node-handle--source { right: -6px; }
 .node-handle--yes { top: 46%; right: -6px; background: #168a5b; box-shadow: 0 0 0 1px #168a5b; }.node-handle--no { top: 76%; right: -6px; background: #d64242; box-shadow: 0 0 0 1px #d64242; }
