@@ -11,19 +11,19 @@ interface EngineInfo {
 
 const { data: piiEngines } = await useFetch<{ engines: EngineInfo[] }>(
   `${config.public.apiBase}/api/pii/v1/engines`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 const { data: guardrailEngines } = await useFetch<{ engines: EngineInfo[] }>(
   `${config.public.apiBase}/api/guardrails/v1/engines`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 const { data: moderationEngines } = await useFetch<{ engines: EngineInfo[] }>(
   `${config.public.apiBase}/api/moderation/v1/engines`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 const { data: redteamTools } = await useFetch<{ tools: EngineInfo[] }>(
   `${config.public.apiBase}/api/redteam/v1/tools`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 
 const roadmap = [

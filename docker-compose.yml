@@ -7,6 +7,7 @@ services:
       - "3000:3000"
     environment:
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8080}
+      SITE_PASSWORD: ${SITE_PASSWORD:-}
     depends_on:
       gateway:
         condition: service_started
@@ -23,6 +24,7 @@ services:
       REDTEAM_SERVICE_URL: http://redteam-service:8004
       ORCHESTRATOR_SERVICE_URL: http://orchestrator:8005
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SITE_PASSWORD: ${SITE_PASSWORD:-}
     depends_on:
       pii-service:
         condition: service_healthy

@@ -2,11 +2,39 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import proxy from '@fastify/http-proxy'
 import { config } from './config.js'
+import { hasValidSession, protectionConfigured } from './auth.js'
 import { getMonitoringSnapshot, startMonitoring } from './monitoring.js'
+import { registerApiDocumentation } from './swagger.js'
 
 const app = Fastify({ logger: true })
 
-await app.register(cors, { origin: config.corsOrigins })
+await app.register(cors, { origin: config.corsOrigins, credentials: true })
+
+app.addHook('onRequest', async (request, reply) => {
+  reply.header('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex')
+  reply.header('X-Content-Type-Options', 'nosniff')
+  reply.header('Cache-Control', 'no-store')
+
+  const path = request.url.split('?')[0]
+  if (path === '/ready') return
+
+  if (!protectionConfigured()) {
+    return reply.code(503).send({
+      error: 'protection_not_configured',
+      message: 'SITE_PASSWORD must be configured with at least 12 characters.'
+    })
+  }
+
+  if (!hasValidSession(request.headers.cookie)) {
+    return reply.code(401).send({ error: 'authentication_required' })
+  }
+})
+
+await registerApiDocumentation(app)
+
+// Deliberately minimal and unauthenticated so App Platform can check the
+// container without exposing platform or dependency details.
+app.get('/ready', async () => ({ status: 'ok', service: 'gateway' }))
 
 // Proxy-Routen: /api/<service>/* -> <service-url>/*
 for (const svc of config.services) {

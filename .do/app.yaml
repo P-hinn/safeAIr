@@ -3,9 +3,10 @@
 # Create/update the app with:
 #   doctl apps create --spec .do/app.yaml --upsert
 #
-# API provider keys are intentionally not stored in Git. Add OPENAI_API_KEY,
-# ANTHROPIC_API_KEY and LAKERA_GUARD_API_KEY as encrypted runtime variables in
-# the DigitalOcean control panel when the corresponding integrations are used.
+# Secrets are intentionally not stored in Git. Before exposing the app, add a
+# shared SITE_PASSWORD (minimum 12 characters) as an encrypted app-level runtime
+# variable. Add OPENAI_API_KEY, ANTHROPIC_API_KEY and LAKERA_GUARD_API_KEY the
+# same way when the corresponding integrations are used.
 
 name: safeair
 region: fra
@@ -38,6 +39,18 @@ ingress:
         preserve_path_prefix: true
     - match:
         path:
+          prefix: /docs
+      component:
+        name: gateway
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /openapi.json
+      component:
+        name: gateway
+        preserve_path_prefix: true
+    - match:
+        path:
           prefix: /
       component:
         name: web
@@ -59,7 +72,7 @@ services:
         scope: RUN_TIME
         type: GENERAL
     health_check:
-      http_path: /
+      http_path: /__health
       initial_delay_seconds: 20
       period_seconds: 15
       timeout_seconds: 5
@@ -106,7 +119,7 @@ services:
         scope: RUN_TIME
         type: GENERAL
     health_check:
-      http_path: /health
+      http_path: /ready
       initial_delay_seconds: 60
       period_seconds: 15
       timeout_seconds: 8

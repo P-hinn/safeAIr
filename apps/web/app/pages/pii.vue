@@ -10,7 +10,7 @@ interface EngineInfo {
 
 const { data: engineData } = await useFetch<{ default: string; engines: EngineInfo[] }>(
   `${config.public.apiBase}/api/pii/v1/engines`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 
 const text = ref('Hallo, ich bin Max Mustermann, meine E-Mail ist max@example.com und meine Telefonnummer ist +49 151 12345678.')
@@ -26,6 +26,7 @@ async function anonymize() {
   result.value = null
   try {
     result.value = await $fetch(`${config.public.apiBase}/api/pii/v1/anonymize`, {
+      credentials: 'include',
       method: 'POST',
       body: { text: text.value, language: language.value, engine: engine.value }
     })
@@ -45,7 +46,7 @@ async function anonymize() {
     <div class="card">
       <textarea v-model="text" />
       <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1rem; flex-wrap: wrap">
-        <select v-model="engine" style="background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem">
+        <select v-model="engine" style="background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.5rem">
           <option
             v-for="e in engineData?.engines ?? [{ name: 'presidio', title: 'Microsoft Presidio', status: 'ready', detail: '' }]"
             :key="e.name"
@@ -55,7 +56,7 @@ async function anonymize() {
             {{ e.title }}{{ e.status !== 'ready' ? ' (nicht aktiv)' : '' }}
           </option>
         </select>
-        <select v-model="language" style="background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem">
+        <select v-model="language" style="background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.5rem">
           <option value="de">Deutsch</option>
           <option value="en">Englisch</option>
         </select>

@@ -20,18 +20,20 @@ interface ScanJob {
 
 const { data: toolData } = await useFetch<{ tools: ToolInfo[] }>(
   `${config.public.apiBase}/api/redteam/v1/tools`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 
 const { data: scanData, refresh: refreshScans } = await useFetch<{ scans: ScanJob[] }>(
   `${config.public.apiBase}/api/redteam/v1/scans`,
-  { server: false, lazy: true }
+  { server: false, lazy: true, credentials: 'include' }
 )
 
 const selectedJob = ref<ScanJob | null>(null)
 
 async function showJob(id: string) {
-  selectedJob.value = await $fetch<ScanJob>(`${config.public.apiBase}/api/redteam/v1/scans/${id}`)
+  selectedJob.value = await $fetch<ScanJob>(`${config.public.apiBase}/api/redteam/v1/scans/${id}`, {
+    credentials: 'include'
+  })
 }
 </script>
 

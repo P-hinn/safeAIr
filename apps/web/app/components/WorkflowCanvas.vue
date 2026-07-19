@@ -179,4 +179,9 @@ function nodeColor(node: Node) {
   .palette-head, .palette-help { display: none; }.palette-item { width: auto; min-width: 105px; min-height: 42px; flex: 0 0 auto; }.palette-item small, .palette-item > i { display: none; }
   .canvas-tip { display: none; }
 }
+.workflow-builder, .safair-flow { background: var(--paper); }
+.node-palette { border-right-color: var(--border-strong); background: var(--surface); }
+.palette-icon, .palette-item > span:nth-child(2), .palette-help, .safair-flow .vue-flow__controls, .safair-flow .vue-flow__minimap, .canvas-tip { border-radius: 0; }
+.palette-icon { border: 1px solid currentColor; background: transparent; }
+.safair-flow .vue-flow__controls, .safair-flow .vue-flow__minimap { border-color: var(--ink); box-shadow: none; }
 </style>

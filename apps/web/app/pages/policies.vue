@@ -4,9 +4,9 @@ const api = config.public.apiBase
 
 interface Policy { id: string; name: string; builtin: boolean; config: Record<string, any> }
 
-const { data, refresh } = await useFetch<{ policies: Policy[] }>(`${api}/api/orchestrator/v1/policies`, { server: false, lazy: true })
-const { data: piiEngines } = await useFetch<{ engines: { name: string; status: string }[] }>(`${api}/api/pii/v1/engines`, { server: false, lazy: true })
-const { data: grEngines } = await useFetch<{ engines: { name: string; status: string }[] }>(`${api}/api/guardrails/v1/engines`, { server: false, lazy: true })
+const { data, refresh } = await useFetch<{ policies: Policy[] }>(`${api}/api/orchestrator/v1/policies`, { server: false, lazy: true, credentials: 'include' })
+const { data: piiEngines } = await useFetch<{ engines: { name: string; status: string }[] }>(`${api}/api/pii/v1/engines`, { server: false, lazy: true, credentials: 'include' })
+const { data: grEngines } = await useFetch<{ engines: { name: string; status: string }[] }>(`${api}/api/guardrails/v1/engines`, { server: false, lazy: true, credentials: 'include' })
 
 const editing = ref<Policy | null>(null)
 const isNew = ref(false)
@@ -43,9 +43,9 @@ async function save() {
   errorMsg.value = ''
   try {
     if (isNew.value) {
-      await $fetch(`${api}/api/orchestrator/v1/policies`, { method: 'POST', body: { name: editing.value.name, config: editing.value.config } })
+      await $fetch(`${api}/api/orchestrator/v1/policies`, { credentials: 'include', method: 'POST', body: { name: editing.value.name, config: editing.value.config } })
     } else {
-      await $fetch(`${api}/api/orchestrator/v1/policies/${editing.value.id}`, { method: 'PUT', body: { name: editing.value.name, config: editing.value.config } })
+      await $fetch(`${api}/api/orchestrator/v1/policies/${editing.value.id}`, { credentials: 'include', method: 'PUT', body: { name: editing.value.name, config: editing.value.config } })
     }
     editing.value = null
     await refresh()
@@ -59,7 +59,7 @@ async function save() {
 async function remove(p: Policy) {
   if (!confirm(`Policy "${p.name}" löschen?`)) return
   try {
-    await $fetch(`${api}/api/orchestrator/v1/policies/${p.id}`, { method: 'DELETE' })
+    await $fetch(`${api}/api/orchestrator/v1/policies/${p.id}`, { credentials: 'include', method: 'DELETE' })
     await refresh()
   } catch (e: any) {
     errorMsg.value = e?.data?.detail?.error?.message ?? 'Löschen fehlgeschlagen'
@@ -75,7 +75,7 @@ const stepDefs = [
   { key: 'pii_output', label: 'PII-Check (Antwort)', type: 'pii' }
 ]
 
-const selectStyle = 'background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem'
+const selectStyle = 'background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.4rem'
 </script>
 
 <template>

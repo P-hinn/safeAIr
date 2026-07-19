@@ -13,6 +13,7 @@ async function moderate() {
   result.value = null
   try {
     result.value = await $fetch(`${config.public.apiBase}/api/moderation/v1/moderate`, {
+      credentials: 'include',
       method: 'POST',
       body: { text: text.value, role: role.value }
     })
@@ -35,7 +36,7 @@ async function moderate() {
     <div class="card">
       <textarea v-model="text" />
       <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1rem">
-        <select v-model="role" style="background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.5rem">
+        <select v-model="role" style="background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.5rem">
           <option value="user">User-Nachricht</option>
           <option value="assistant">LLM-Antwort</option>
         </select>

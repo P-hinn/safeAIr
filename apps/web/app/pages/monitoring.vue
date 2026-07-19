@@ -62,7 +62,8 @@ const config = useRuntimeConfig()
 const api = config.public.apiBase
 const { data, error, status, refresh } = await useFetch<MonitoringSnapshot>(`${api}/monitoring`, {
   server: false,
-  lazy: true
+  lazy: true,
+  credentials: 'include'
 })
 
 const forceRefreshing = ref(false)
@@ -78,7 +79,10 @@ async function forceRefresh() {
   if (forceRefreshing.value) return
   forceRefreshing.value = true
   try {
-    data.value = await $fetch<MonitoringSnapshot>(`${api}/monitoring/refresh`, { method: 'POST' })
+    data.value = await $fetch<MonitoringSnapshot>(`${api}/monitoring/refresh`, {
+      credentials: 'include',
+      method: 'POST'
+    })
   } finally {
     forceRefreshing.value = false
   }
@@ -326,4 +330,21 @@ const serviceName = (id: string) => data.value?.services.find((service) => servi
 @media (max-width: 1180px) { .monitor-kpis { grid-template-columns: 1fr 1fr; }.monitor-grid { grid-template-columns: 1fr; }.provider-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) { .monitoring-head { align-items: flex-start; }.monitor-actions { width: 100%; align-items: stretch; flex-direction: column; }.auto-refresh { justify-content: center; }.status-hero { align-items: flex-start; flex-direction: column; }.uptime-window { width: 100%; }.monitor-kpis { grid-template-columns: 1fr; }.mini-history { display: none; }.service-info { min-width: 0; }.service-latency { display: none; }.provider-grid, .capability-grid { grid-template-columns: 1fr; }.capability-item:nth-child(2) { border-top: 1px solid var(--border); }.endpoint-head { align-items: flex-start; flex-direction: column; }.endpoint-filter { max-width: 100%; } }
 @media (max-width: 480px) { .service-row .status-pill { min-width: 0; padding: 5px 7px; }.service-row .status-pill::before { display: none; }.hero-status { align-items: flex-start; }.hero-pulse { width: 38px; height: 38px; }.status-hero { padding: 21px; } }
+.status-hero, .status-hero--degraded, .status-hero--down { border: 1px solid var(--ink); border-top: 3px solid var(--acid); border-radius: 0; background: var(--ink); box-shadow: none; }
+.status-hero--degraded { border-top-color: var(--warn); }
+.status-hero--down { border-top-color: var(--err); }
+.hero-pulse { border: 1px solid rgba(241,239,232,.28); border-radius: 0; background: transparent; }
+.monitor-kpis { gap: 0; border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
+.monitor-kpi { border: 0; border-left: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
+.monitor-kpi:first-child { border-left: 0; }
+.kpi-symbol, .service-status-icon, .outage-icon, .provider-logo, .capability-icon { border: 1px solid currentColor; border-radius: 0; background: transparent; }
+.monitor-kpi strong { font-family: 'Space Grotesk', sans-serif; }
+.section-kicker { color: var(--accent); }
+.service-row { background: transparent; }
+.service-row:hover, .service-row--active { border-radius: 0; background: var(--surface-soft); }
+.endpoint-row--head { background: var(--surface-soft); }
+.endpoint-filter button, .endpoint-filter button.active, .type-badge { border-radius: 0; }
+.endpoint-filter button.active { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.provider-card { border-radius: 0; background: transparent; }
+.model-list span { border: 1px solid var(--border); border-radius: 0; background: var(--surface-soft); }
 </style>

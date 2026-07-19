@@ -35,6 +35,8 @@ docker compose up --build
 
 - UI: http://localhost:3000
 - Gateway: http://localhost:8080/health
+- Swagger UI: http://localhost:8080/docs
+- OpenAPI-Spezifikation: http://localhost:8080/openapi.json
 
 ## Lokale Entwicklung ohne Docker
 
@@ -60,6 +62,8 @@ uvicorn app.main:app --reload --port 8002
 ```
 
 ## API-Überblick (über das Gateway)
+
+Die vollständige, interaktive API-Dokumentation läuft unter `/docs`. Für Code-Generatoren und API-Clients steht die OpenAPI-3-Spezifikation unter `/openapi.json` sowie als JSON/YAML unter `/docs/json` und `/docs/yaml` bereit. Die Dokumentation verwendet den zentralen safAIr-Login; nur der minimale Readiness-Endpunkt `/ready` bleibt öffentlich.
 
 | Methode | Pfad | Beschreibung |
 |---|---|---|

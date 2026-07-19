@@ -657,4 +657,22 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
   .map-legend { display: none; }.form-grid { grid-template-columns: 1fr; }.field--full { grid-column: auto; }.tool-list { grid-template-columns: 1fr; }
   .create-modal { padding: 22px; }.modal-field-row, .relation-form-route { grid-template-columns: 1fr; }.relation-form-route > span { padding: 0; transform: rotate(90deg); }.transfer-notice { right: 12px; bottom: 12px; }
 }
+.process-viewbar { border-color: var(--border-strong); }
+.view-tabs { border: 1px solid var(--border-strong); border-radius: 0; background: transparent; }
+.view-tabs button { border-radius: 0; }
+.view-tabs button.active { border-color: var(--ink); background: var(--ink); color: var(--acid); box-shadow: none; }
+.process-tab, .process-tab--active, .process-tab--active:hover { border-radius: 0; }
+.process-tab--active, .process-tab--active:hover { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.process-hero { border: 1px solid var(--ink); border-top: 3px solid var(--acid); border-radius: 0; background: var(--ink); box-shadow: none; }
+.process-symbol { border: 1px solid rgba(241,239,232,.35); border-radius: 0; background: transparent; color: var(--acid); }
+.process-metrics strong { font-family: 'Space Grotesk', sans-serif; }
+.map-insight { border-color: var(--ink); border-radius: 0; background: var(--acid); }
+.insight-icon { border: 1px solid var(--ink); border-radius: 0; background: transparent; color: var(--ink); }
+.responsibility-row--head { background: var(--surface-soft); }
+.tool-option, .edge-route, .logic-hint { border-radius: 0; }
+.tool-option--selected { border-color: var(--blue); background: var(--accent-soft); }
+.tool-logo, .custom-check, .tool-status { border-radius: 0; }
+.create-modal { border: 1px solid var(--ink); border-radius: 0; background: var(--paper); box-shadow: 12px 12px 0 rgba(23,23,20,.14); }
+.modal-icon { border: 1px solid currentColor; border-radius: 0; background: transparent; }
+.transfer-notice { border-radius: 0; background: var(--paper); box-shadow: 8px 8px 0 rgba(23,23,20,.12); }
 </style>

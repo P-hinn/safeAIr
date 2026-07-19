@@ -20,8 +20,8 @@ interface ChatEntry {
 interface Policy { id: string; name: string; config: Record<string, any> }
 interface Provider { name: string; title: string; status: string; models: string[] }
 
-const { data: policyData } = await useFetch<{ policies: Policy[] }>(`${api}/api/orchestrator/v1/policies`, { server: false, lazy: true })
-const { data: providerData } = await useFetch<{ providers: Provider[] }>(`${api}/api/orchestrator/v1/providers`, { server: false, lazy: true })
+const { data: policyData } = await useFetch<{ policies: Policy[] }>(`${api}/api/orchestrator/v1/policies`, { server: false, lazy: true, credentials: 'include' })
+const { data: providerData } = await useFetch<{ providers: Provider[] }>(`${api}/api/orchestrator/v1/providers`, { server: false, lazy: true, credentials: 'include' })
 
 const policyId = ref('standard')
 const provider = ref('')
@@ -65,6 +65,7 @@ async function send() {
     const res = await $fetch<{ reply: string; blocked: boolean; trace: TraceEntry[] }>(
       `${api}/api/orchestrator/v1/chat`,
       {
+        credentials: 'include',
         method: 'POST',
         body: {
           message: text,
@@ -96,22 +97,22 @@ async function send() {
 
     <div class="card" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem">
       <label style="color: var(--muted); font-size: 0.85rem">Policy
-        <select v-model="policyId" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem; margin-top: 0.25rem">
+        <select v-model="policyId" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.45rem; margin-top: 0.25rem">
           <option v-for="p in policyData?.policies ?? []" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>
       </label>
       <label style="color: var(--muted); font-size: 0.85rem">Provider
-        <select v-model="provider" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem; margin-top: 0.25rem">
+        <select v-model="provider" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.45rem; margin-top: 0.25rem">
           <option v-for="p in providerData?.providers ?? []" :key="p.name" :value="p.name" :disabled="p.status !== 'ready'">
             {{ p.title }}{{ p.status !== 'ready' ? ' (nicht konfiguriert)' : '' }}
           </option>
         </select>
       </label>
       <label style="color: var(--muted); font-size: 0.85rem">Modell
-        <select v-if="activeProvider?.models?.length" v-model="model" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem; margin-top: 0.25rem">
+        <select v-if="activeProvider?.models?.length" v-model="model" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.45rem; margin-top: 0.25rem">
           <option v-for="m in activeProvider.models" :key="m" :value="m">{{ m }}</option>
         </select>
-        <input v-else v-model="model" placeholder="z. B. llama3.2" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.45rem; margin-top: 0.25rem" />
+        <input v-else v-model="model" placeholder="z. B. llama3.2" style="display: block; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.45rem; margin-top: 0.25rem" />
       </label>
       <NuxtLink to="/policies" style="color: var(--accent); font-size: 0.85rem; margin-left: auto">Policies bearbeiten →</NuxtLink>
     </div>
@@ -152,7 +153,7 @@ async function send() {
         <input
           v-model="input"
           placeholder="Nachricht eingeben …"
-          style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem"
+          style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.7rem"
         />
         <button :disabled="loading || !input" type="submit">Senden</button>
       </form>
