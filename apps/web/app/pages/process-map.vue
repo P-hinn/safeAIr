@@ -25,6 +25,7 @@ const viewMode = ref<'landscape' | 'workflow'>(queryProcess ? 'workflow' : 'land
 const selectedStepId = ref('')
 const selectedEdgeId = ref('')
 const toolFilter = ref('Alle')
+const processTour = ref<{ start: () => void }>()
 const createOpen = ref(false)
 const newProcessName = ref('')
 const newProcessOwner = ref('')
@@ -38,6 +39,77 @@ const newRelationTarget = ref('')
 const newRelationType = ref<ProcessRelationType>('handoff')
 const newRelationLabel = ref('')
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
+let processTourTimer: number | undefined
+
+const PROCESS_TOUR_STORAGE_KEY = 'safair:process-onboarding-tour'
+const processTourSteps = [
+  {
+    eyebrow: 'Prozess-Tour',
+    title: 'Von der Unternehmenskarte bis zum KI-Schritt',
+    description: 'Diese Tour erklärt das Datenmodell der Prozesslandschaft und zeigt anschließend, wie ein einzelner Prozess fachlich und technisch aufgebaut wird.',
+    target: '[data-process-tour="process-intro"]'
+  },
+  {
+    eyebrow: '01 · Prozessportfolio',
+    title: 'Prozesse anlegen oder per BPMN übernehmen',
+    description: 'Neue Prozesse erhalten direkt einen Owner, eine federführende Abteilung und eine Ebene. Bestehende Modelle können als BPMN importiert und später wieder exportiert werden.',
+    target: '[data-process-tour="process-actions"]'
+  },
+  {
+    eyebrow: '02 · Zwei Detailstufen',
+    title: 'Landkarte und Workflow erfüllen unterschiedliche Aufgaben',
+    description: 'Die Prozesslandschaft beantwortet „Welche Prozesse gibt es und wie hängen sie zusammen?“. Der Workflow-Designer zeigt dagegen den Ablauf innerhalb eines ausgewählten Prozesses.',
+    target: '[data-process-tour="view-modes"]'
+  },
+  {
+    eyebrow: '03 · Management-Kennzahlen',
+    title: 'Das Portfolio wird automatisch aggregiert',
+    description: 'Abteilungen, Prozesse, Verbindungen und AI Coverage entstehen aus den darunterliegenden Prozess- und Schrittinformationen. Management und Fachteams arbeiten damit auf derselben Datenbasis.',
+    target: '[data-process-tour="portfolio-kpis"]'
+  },
+  {
+    eyebrow: '04 · Unternehmenskarte',
+    title: 'Ebenen, Abteilungen und Prozesse lesen',
+    description: 'Die horizontalen Bänder trennen Steuerungs-, Kern- und Unterstützungsprozesse. Darin gruppieren Abteilungsflächen die Prozesskarten. Ein Klick auf eine Prozesskarte öffnet ihren Workflow.',
+    target: '[data-process-tour="landscape-map"]'
+  },
+  {
+    eyebrow: '05 · Prozesszusammenhänge',
+    title: 'Pfeile dokumentieren mehr als nur eine Reihenfolge',
+    description: 'Übergabe, Governance, Unterstützung und Datenfluss haben eigene Farben. Jede Verbindung besitzt Quelle, Ziel und ein konkretes Übergabeobjekt – etwa Kundendaten, Freigaben oder Richtlinien.',
+    target: '[data-process-tour="relations"]'
+  },
+  {
+    eyebrow: '06 · Prozessstammdaten',
+    title: 'Owner, Abteilung und Ebene schaffen Verantwortung',
+    description: 'Im Einzelprozess werden fachliche Verantwortung, Status und organisatorische Einordnung gepflegt. Die Kennzahlen rechts zeigen die daraus berechnete Governance-Situation.',
+    target: '[data-process-tour="process-hero"]'
+  },
+  {
+    eyebrow: '07 · Workflow-Logik',
+    title: 'Ein Prozess besteht aus verbundenen Bausteinen',
+    description: 'Auslöser, Aufgaben, KI-Schritte, Entscheidungen, Freigaben und Prozessenden werden auf dem Canvas platziert. Verbindungen bilden Reihenfolge, Ja-/Nein-Pfade und Fallbacks ab.',
+    target: '[data-process-tour="workflow-builder"]'
+  },
+  {
+    eyebrow: '08 · Governance pro Schritt',
+    title: 'Risiko und Kontrolle sitzen am konkreten Arbeitsschritt',
+    description: 'Für jeden Schritt werden Typ, Risikostufe, Verantwortlicher, Human-in-the-Loop und Kontrollmaßnahme dokumentiert. So bleiben technische Automatisierung und fachliche Freigabe nachvollziehbar.',
+    target: '[data-process-tour="step-detail"]'
+  },
+  {
+    eyebrow: '09 · KI-Unterstützung',
+    title: 'KI- und Safety-Tools gezielt zuweisen',
+    description: 'Tools werden nicht nur pauschal einem Prozess, sondern dem tatsächlich unterstützten Schritt zugeordnet. Daraus berechnet safAIr die AI Coverage und erkennt ungeschützte Risikoschritte.',
+    target: '[data-process-tour="tool-assignment"]'
+  },
+  {
+    eyebrow: '10 · Governance-Nachweis',
+    title: 'Die Verantwortungsmatrix fasst den Workflow zusammen',
+    description: 'Zum Abschluss entsteht automatisch eine prüfbare Übersicht aus Prozessschritt, Verantwortlichem, Kontrolle und Freigabe. Die Prozess-Tour kann oben jederzeit erneut gestartet werden.',
+    target: '[data-process-tour="responsibility"]'
+  }
+]
 
 const selectedProcess = computed(() => processes.value.find((process) => process.id === selectedProcessId.value))
 const selectedStep = computed(() => selectedProcess.value?.steps.find((step) => step.id === selectedStepId.value))
@@ -216,19 +288,60 @@ function restoreDemo() {
   viewMode.value = 'landscape'
 }
 
+function prepareProcessTourStep(index: number) {
+  createOpen.value = false
+  relationOpen.value = false
+
+  if (index <= 5) {
+    viewMode.value = 'landscape'
+    selectedStepId.value = ''
+    selectedEdgeId.value = ''
+    return
+  }
+
+  viewMode.value = 'workflow'
+  if (!selectedProcess.value) selectedProcessId.value = processes.value[0]?.id ?? ''
+
+  if (index >= 8) {
+    selectedStepId.value = selectedProcess.value?.steps[0]?.id ?? ''
+    selectedEdgeId.value = ''
+  } else {
+    selectedStepId.value = ''
+    selectedEdgeId.value = ''
+  }
+}
+
 const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : status === 'pilot' ? 'Pilot' : 'Geplant'
-onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
+onMounted(() => {
+  processTourTimer = window.setTimeout(() => {
+    try {
+      const generalTourSeen = Boolean(localStorage.getItem('safair:onboarding-tour'))
+      const processTourSeen = Boolean(localStorage.getItem(PROCESS_TOUR_STORAGE_KEY))
+      if (generalTourSeen && !processTourSeen && !document.querySelector('.tour')) processTour.value?.start()
+    } catch {
+      // The contextual tour remains available through its button when storage is blocked.
+    }
+  }, 950)
+})
+onBeforeUnmount(() => {
+  if (noticeTimer) clearTimeout(noticeTimer)
+  if (processTourTimer) clearTimeout(processTourTimer)
+})
 </script>
 
 <template>
   <div class="process-page">
-    <header class="page-head">
+    <header class="page-head" data-process-tour="process-intro">
       <div>
         <p class="page-kicker">Business Process Intelligence</p>
         <h1>Prozesslandkarte</h1>
         <p class="page-description">Das gesamte Prozessportfolio steuern, in Workflows einsteigen und KI-Tools direkt den einzelnen Prozessschritten zuweisen.</p>
       </div>
-      <div class="page-actions">
+      <div class="page-actions" data-process-tour="process-actions">
+        <button class="button-secondary process-tour-button" @click="processTour?.start()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.5 2.5 0 0 1 4.8 1c0 2-2.5 2.1-2.5 4M12 18h.01"/></svg>
+          Prozess-Tour
+        </button>
         <button class="button-secondary" @click="triggerBpmnImport">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
           BPMN importieren
@@ -246,7 +359,7 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
     </header>
 
     <section class="process-viewbar card">
-      <div class="view-tabs">
+      <div class="view-tabs" data-process-tour="view-modes">
         <button :class="{ active: viewMode === 'landscape' }" @click="viewMode = 'landscape'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           Prozesslandschaft
@@ -297,7 +410,7 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
     </section>
 
     <template v-if="viewMode === 'workflow' && selectedProcess">
-      <section class="process-hero">
+      <section class="process-hero" data-process-tour="process-hero">
         <div class="process-heading">
           <div class="process-symbol">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h16"/><circle cx="17" cy="12" r="3"/></svg>
@@ -340,7 +453,7 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
 
       <section class="map-layout" :class="{ 'map-layout--detail': selectedStep || selectedEdge }">
         <div class="map-column">
-          <article class="card map-card">
+          <article class="card map-card" data-process-tour="workflow-builder">
             <div class="map-head">
               <div>
                 <p class="section-kicker">Visueller Prozessaufbau</p>
@@ -376,7 +489,7 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
             </div>
           </article>
 
-          <article class="card responsibility-card">
+          <article class="card responsibility-card" data-process-tour="responsibility">
             <div class="map-head">
               <div><p class="section-kicker">Governance</p><h2>Verantwortungsmatrix</h2></div>
             </div>
@@ -392,7 +505,7 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
           </article>
         </div>
 
-        <aside v-if="selectedStep || selectedEdge" class="card detail-panel">
+        <aside v-if="selectedStep || selectedEdge" class="card detail-panel" data-process-tour="step-detail">
           <template v-if="selectedStep">
           <div class="detail-head">
             <div>
@@ -433,7 +546,7 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
             <label class="field field--full"><span>Kontrollmaßnahme</span><textarea v-model="selectedStep.control" rows="2" /></label>
           </div>
 
-          <div class="tool-assignment">
+          <div class="tool-assignment" data-process-tour="tool-assignment">
             <div class="assignment-head">
               <div><h3>KI-Tools zuweisen</h3><span>{{ selectedStep.toolIds.length }} ausgewählt</span></div>
             </div>
@@ -553,12 +666,22 @@ onBeforeUnmount(() => { if (noticeTimer) clearTimeout(noticeTimer) })
         <button aria-label="Hinweis schließen" @click="transferNotice = null">×</button>
       </div>
     </Transition>
+
+    <OnboardingTour
+      ref="processTour"
+      :steps="processTourSteps"
+      :storage-key="PROCESS_TOUR_STORAGE_KEY"
+      :auto-start="false"
+      :step-delay="320"
+      @step-change="prepareProcessTourStep"
+    />
   </div>
 </template>
 
 <style scoped>
 .page-actions { display: flex; gap: 10px; }
 .page-actions svg { width: 15px; }
+.process-tour-button { border-style: dashed; }
 .file-input { display: none; }
 .process-viewbar { min-height: 58px; margin-bottom: 20px; padding: 7px 9px; display: flex; align-items: center; gap: 15px; }
 .view-tabs { display: flex; padding: 3px; gap: 3px; border-radius: 9px; background: #f0f3f7; }.view-tabs button { min-height: 36px; padding: 0 13px; border-color: transparent; background: transparent; color: var(--muted); font-size: 9px; }.view-tabs button:hover { border-color: transparent; background: rgba(255,255,255,.65); color: var(--text); transform: none; }.view-tabs button.active { border-color: #dbe3ee; background: #fff; color: var(--accent); box-shadow: 0 2px 7px rgba(20,34,56,.07); }.view-tabs button:disabled { opacity: .45; }.view-tabs svg { width: 14px; }

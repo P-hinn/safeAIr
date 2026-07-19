@@ -2,6 +2,7 @@
 const route = useRoute()
 const config = useRuntimeConfig()
 const mobileNavOpen = ref(false)
+const onboardingTour = ref<{ start: () => void }>()
 
 const apiDocsUrl = computed(() => {
   const apiBase = String(config.public.apiBase || '').replace(/\/+$/, '')
@@ -64,9 +65,20 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
       </div>
 
       <nav class="side-nav" aria-label="Hauptnavigation">
-        <section v-for="group in navigation" :key="group.label" class="nav-group">
+        <section
+          v-for="group in navigation"
+          :key="group.label"
+          class="nav-group"
+          :data-onboarding="group.label === 'Governance' ? 'governance-group' : undefined"
+        >
           <p class="nav-group-label">{{ group.label }}</p>
-          <NuxtLink v-for="item in group.items" :key="item.to" :to="item.to" class="nav-item">
+          <NuxtLink
+            v-for="item in group.items"
+            :key="item.to"
+            :to="item.to"
+            class="nav-item"
+            :data-onboarding="item.to === '/' ? 'dashboard-link' : item.to === '/process-map' ? 'process-map-link' : item.to === '/monitoring' ? 'monitoring-link' : undefined"
+          >
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <template v-if="item.icon === 'dashboard'">
                 <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
@@ -107,7 +119,7 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
         </section>
         <section class="nav-group">
           <p class="nav-group-label">Entwicklung</p>
-          <a :href="apiDocsUrl" class="nav-item">
+          <a :href="apiDocsUrl" class="nav-item" data-onboarding="api-docs-link">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" />
             </svg>
@@ -119,6 +131,16 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
       <div class="sidebar-footer">
         <div class="system-indicator"><span /> Systeme betriebsbereit</div>
         <p>Governance Workspace</p>
+        <button
+          class="onboarding-restart"
+          data-onboarding="onboarding-restart"
+          @click="onboardingTour?.start()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.5 2.5 0 0 1 4.8 1c0 2-2.5 2.1-2.5 4M12 18h.01" />
+          </svg>
+          Einführung starten
+        </button>
       </div>
     </aside>
 
@@ -145,6 +167,11 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
         <NuxtPage />
       </main>
     </div>
+
+    <OnboardingTour
+      ref="onboardingTour"
+      @navigation-visibility="mobileNavOpen = $event"
+    />
   </div>
 </template>
 
@@ -275,6 +302,20 @@ a { color: inherit; }
 .system-indicator { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 10.5px; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
 .system-indicator span { width: 7px; height: 7px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 0 1px var(--ink); }
 .sidebar-footer p { margin: 8px 0 0 15px; color: #5c5a54; font-size: 10.5px; }
+.onboarding-restart {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 14px;
+  padding: 0 10px;
+  justify-content: flex-start;
+  border-color: var(--border-strong);
+  border-radius: 0;
+  background: rgba(255,255,255,.32);
+  color: var(--ink);
+  font-size: 9.5px;
+}
+.onboarding-restart:hover { border-color: var(--ink); background: var(--acid); color: var(--ink); transform: none; }
+.onboarding-restart svg { width: 15px; height: 15px; flex: 0 0 auto; }
 
 .workspace { width: calc(100% - 244px); min-width: 0; min-height: 100vh; margin-left: 244px; background: var(--workspace); }
 .topbar {

@@ -349,14 +349,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="landscape-view">
-    <section class="map-kpis">
+    <section class="map-kpis" data-process-tour="portfolio-kpis">
       <article><span class="kpi-icon kpi-icon--blue">A</span><div><span>Abteilungen</span><strong>{{ departments.length }}</strong><small>als Bereiche auf der Landkarte</small></div></article>
       <article><span class="kpi-icon kpi-icon--green">P</span><div><span>Prozesse</span><strong>{{ processes.length }}</strong><small>{{ visibleProcesses.length }} aktuell sichtbar</small></div></article>
       <article><span class="kpi-icon kpi-icon--purple">↗</span><div><span>Verbindungen</span><strong>{{ allRelations.length }}</strong><small>mit Richtung und Übergabeobjekt</small></div></article>
       <article><span class="kpi-icon kpi-icon--amber">AI</span><div><span>AI Coverage</span><strong>{{ coverage }}%</strong><small>über das gesamte Portfolio</small></div></article>
     </section>
 
-    <article ref="mapCard" class="card visual-map-card" :class="{ 'visual-map-card--fullscreen': isFullscreen }">
+    <article ref="mapCard" class="card visual-map-card" data-process-tour="landscape-map" :class="{ 'visual-map-card--fullscreen': isFullscreen }">
       <header class="visual-map-head">
         <div>
           <p class="section-kicker">Interaktive Unternehmenskarte</p>
@@ -390,7 +390,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <div class="relation-legend">
+      <div class="relation-legend" data-process-tour="relations">
         <button :class="{ active: relationFilter === 'all' }" @click="relationFilter = 'all'">Alle Verbindungen <b>{{ allRelations.length }}</b></button>
         <button v-for="type in relationTypes" :key="type.id" :class="{ active: relationFilter === type.id }" :style="{ '--relation-color': type.color }" @click="relationFilter = type.id">
           <i /> {{ type.label }} <b>{{ allRelations.filter((item) => item.relation.type === type.id).length }}</b>
