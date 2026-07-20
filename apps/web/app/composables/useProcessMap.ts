@@ -4,6 +4,9 @@ export type ToolStatus = 'active' | 'pilot' | 'planned'
 export type WorkflowNodeType = 'trigger' | 'task' | 'ai' | 'decision' | 'approval' | 'end'
 export type LandscapeLayer = 'management' | 'core' | 'support'
 export type ProcessRelationType = 'handoff' | 'governance' | 'support' | 'data'
+export type ExecutionMode = 'manual' | 'rule_automated' | 'ai_assisted' | 'ai_autonomous'
+export type AutomationPotential = 'none' | 'partial' | 'full'
+export type DemoPreset = 'compact' | 'complex' | 'custom'
 
 export interface ProcessRelation {
   id: string
@@ -48,7 +51,17 @@ export interface ProcessStep {
   humanApproval: boolean
   control: string
   workflowType: WorkflowNodeType
+  bpmnElementType: string
+  executionMode: ExecutionMode
+  automationPotential: AutomationPotential
   position: WorkflowPosition
+}
+
+export interface BpmnDocument {
+  id: string
+  xml: string
+  processRefs: string[]
+  updatedAt: string
 }
 
 export interface BusinessProcess {
@@ -64,11 +77,32 @@ export interface BusinessProcess {
   relations: ProcessRelation[]
   steps: ProcessStep[]
   connections: WorkflowConnection[]
+  bpmnDocumentId?: string
+  bpmnProcessRef?: string
 }
 
-type RawProcessStep = Omit<ProcessStep, 'workflowType' | 'position'> & {
+export interface ProcessMapMetrics {
+  activities: number
+  automatedActivities: number
+  aiActivities: number
+  manualActivities: number
+  potentialActivities: number
+  aiAutonomousActivities: number
+  aiHumanApprovalActivities: number
+  automationRate: number
+  aiShare: number
+  automationPotential: number
+  aiAutonomy: number
+  humanOversight: number
+  governanceScore: number
+}
+
+type RawProcessStep = Omit<ProcessStep, 'workflowType' | 'position' | 'bpmnElementType' | 'executionMode' | 'automationPotential'> & {
   workflowType?: WorkflowNodeType
   position?: WorkflowPosition
+  bpmnElementType?: string
+  executionMode?: ExecutionMode
+  automationPotential?: AutomationPotential
 }
 
 type RawBusinessProcess = Omit<BusinessProcess, 'steps' | 'connections' | 'landscapeLayer' | 'domain' | 'relations'> & {
@@ -361,6 +395,11 @@ const defaultProcesses: RawBusinessProcess[] = [
 
 const defaultRelations = new Map(defaultProcesses.map((process) => [process.id, process.relations ?? []]))
 const modelToolIds = new Set(['gpt-4o', 'claude', 'llama'])
+const automatedBpmnTypes = new Set(['bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:BusinessRuleTask'])
+const activityBpmnTypes = new Set([
+  'bpmn:Task', 'bpmn:UserTask', 'bpmn:ManualTask', 'bpmn:ServiceTask', 'bpmn:ScriptTask',
+  'bpmn:BusinessRuleTask', 'bpmn:SendTask', 'bpmn:ReceiveTask', 'bpmn:SubProcess', 'bpmn:CallActivity'
+])
 
 function inferWorkflowType(step: RawProcessStep, index: number, length: number): WorkflowNodeType {
   if (step.workflowType) return step.workflowType
@@ -370,6 +409,43 @@ function inferWorkflowType(step: RawProcessStep, index: number, length: number):
   if (step.risk === 'high' && step.humanApproval) return 'approval'
   if (step.toolIds.some((id) => modelToolIds.has(id))) return 'ai'
   return 'task'
+}
+
+function inferBpmnElementType(step: RawProcessStep, workflowType: WorkflowNodeType): string {
+  if (step.bpmnElementType) return step.bpmnElementType.startsWith('bpmn:')
+    ? step.bpmnElementType
+    : `bpmn:${step.bpmnElementType.charAt(0).toUpperCase()}${step.bpmnElementType.slice(1)}`
+  if (workflowType === 'trigger') return 'bpmn:StartEvent'
+  if (workflowType === 'end') return 'bpmn:EndEvent'
+  if (workflowType === 'decision') return 'bpmn:ExclusiveGateway'
+  if (workflowType === 'approval') return 'bpmn:UserTask'
+  if (workflowType === 'ai') return 'bpmn:ServiceTask'
+  return 'bpmn:Task'
+}
+
+function inferExecutionMode(step: RawProcessStep, bpmnElementType: string): ExecutionMode {
+  if (step.executionMode === 'ai_autonomous') return step.executionMode
+  if (step.toolIds.some((id) => modelToolIds.has(id))) return 'ai_assisted'
+  if (step.executionMode) return step.executionMode
+  if (automatedBpmnTypes.has(bpmnElementType)) return 'rule_automated'
+  return 'manual'
+}
+
+export function synchronizeExecutionModeForModelTool(step: ProcessStep, changedToolId: string) {
+  if (!modelToolIds.has(changedToolId)) return
+  const hasAssignedModel = step.toolIds.some((id) => modelToolIds.has(id))
+  if (hasAssignedModel) {
+    if (step.executionMode !== 'ai_assisted' && step.executionMode !== 'ai_autonomous') step.executionMode = 'ai_assisted'
+    return
+  }
+  if (step.executionMode === 'ai_assisted' || step.executionMode === 'ai_autonomous') {
+    step.executionMode = automatedBpmnTypes.has(step.bpmnElementType) ? 'rule_automated' : 'manual'
+  }
+}
+
+function inferAutomationPotential(step: RawProcessStep, executionMode: ExecutionMode): AutomationPotential {
+  if (step.automationPotential) return step.automationPotential
+  return executionMode === 'manual' ? 'partial' : 'full'
 }
 
 function buildDefaultConnections(processId: string, steps: ProcessStep[]): WorkflowConnection[] {
@@ -417,11 +493,19 @@ function buildDefaultConnections(processId: string, steps: ProcessStep[]): Workf
 
 function normalizeProcesses(input: RawBusinessProcess[]): BusinessProcess[] {
   return input.map((rawProcess) => {
-    const steps: ProcessStep[] = rawProcess.steps.map((rawStep, index) => ({
-      ...rawStep,
-      workflowType: inferWorkflowType(rawStep, index, rawProcess.steps.length),
-      position: rawStep.position ?? { x: 70 + index * 270, y: 150 }
-    }))
+    const steps: ProcessStep[] = rawProcess.steps.map((rawStep, index) => {
+      const workflowType = inferWorkflowType(rawStep, index, rawProcess.steps.length)
+      const bpmnElementType = inferBpmnElementType(rawStep, workflowType)
+      const executionMode = inferExecutionMode(rawStep, bpmnElementType)
+      return {
+        ...rawStep,
+        workflowType,
+        bpmnElementType,
+        executionMode,
+        automationPotential: inferAutomationPotential(rawStep, executionMode),
+        position: rawStep.position ?? { x: 70 + index * 270, y: 150 }
+      }
+    })
     const stepIds = new Set(steps.map((step) => step.id))
     const storedConnections = (rawProcess.connections ?? []).filter((edge) => stepIds.has(edge.source) && stepIds.has(edge.target))
 
@@ -441,12 +525,114 @@ function normalizeProcesses(input: RawBusinessProcess[]): BusinessProcess[] {
   })
 }
 
+const complexCatalog: Array<{ layer: LandscapeLayer; names: string[]; domains: string[] }> = [
+  {
+    layer: 'management',
+    names: ['Strategie & Zielsystem', 'Unternehmenssteuerung', 'Governance & Risikomanagement'],
+    domains: ['Strategie', 'Finanzen', 'Governance']
+  },
+  {
+    layer: 'core',
+    names: ['Markt verstehen', 'Produkte entwickeln', 'Angebote erstellen', 'Vertrieb steuern', 'Aufträge abwickeln', 'Leistung erbringen', 'Kunden betreuen', 'Qualität sichern', 'Service liefern', 'Kunden binden'],
+    domains: ['Markt & Portfolio', 'Produkt', 'Vertrieb', 'Vertrieb', 'Operations', 'Operations', 'Customer Experience', 'Qualität', 'Service', 'Customer Experience']
+  },
+  {
+    layer: 'support',
+    names: ['Personal planen', 'Talente gewinnen', 'Mitarbeitende entwickeln', 'Finanzen planen', 'Abschlüsse erstellen', 'Einkauf steuern', 'Lieferanten managen', 'IT-Services betreiben', 'Informationssicherheit', 'Datenplattform betreiben', 'Recht beraten', 'Compliance überwachen', 'Gebäude betreiben', 'Kommunikation steuern', 'Wissen managen', 'Innovation fördern', 'Projektportfolio steuern', 'Nachhaltigkeit berichten', 'Datenschutz sicherstellen', 'Business Continuity'],
+    domains: ['People', 'People', 'People', 'Finance', 'Finance', 'Procurement', 'Procurement', 'IT', 'IT', 'Data', 'Legal', 'Compliance', 'Facilities', 'Communications', 'Knowledge', 'Innovation', 'PMO', 'ESG', 'Privacy', 'Resilience']
+  }
+]
+
+function complexDemoProcesses(): RawBusinessProcess[] {
+  const flat = complexCatalog.flatMap((group) => group.names.map((name, index) => ({
+    name,
+    domain: group.domains[index] ?? group.domains[0] ?? 'Unternehmen',
+    layer: group.layer
+  })))
+  return flat.map((entry, processIndex) => {
+    const id = `demo-${entry.layer}-${processIndex + 1}`
+    const executionModes: ExecutionMode[] = ['manual', 'rule_automated', 'ai_assisted', 'ai_autonomous']
+    const mode = executionModes[processIndex % executionModes.length] ?? 'manual'
+    const target = flat[(processIndex + 1) % flat.length]
+    const targetId = `demo-${target?.layer ?? 'core'}-${((processIndex + 1) % flat.length) + 1}`
+    return {
+      id,
+      name: entry.name,
+      description: `Realistischer Demo-Prozess für ${entry.domain} mit getrennten Automatisierungs- und KI-Kennzahlen.`,
+      owner: `Leitung ${entry.domain}`,
+      status: processIndex % 7 === 0 ? 'pilot' : processIndex % 11 === 0 ? 'planned' : 'active',
+      maturity: 45 + ((processIndex * 7) % 51),
+      volume: `${350 + processIndex * 125} Vorgänge / Monat`,
+      landscapeLayer: entry.layer,
+      domain: entry.domain,
+      relations: target ? [{
+        id: `${id}-relation`,
+        targetId,
+        type: entry.layer === 'management' ? 'governance' : entry.layer === 'support' ? 'support' : 'handoff',
+        label: entry.layer === 'management' ? 'Steuerungsvorgabe' : 'Definierte Übergabe'
+      }] : [],
+      steps: [
+        {
+          id: `${id}-start`, title: 'Bedarf eingegangen', description: 'Der Prozess wird durch einen dokumentierten Bedarf ausgelöst.', owner: `Team ${entry.domain}`, department: entry.domain,
+          risk: 'low', toolIds: [], humanApproval: false, control: 'Vollständigkeit beim Eingang prüfen.', workflowType: 'trigger', bpmnElementType: 'bpmn:StartEvent', executionMode: 'manual', automationPotential: 'none'
+        },
+        {
+          id: `${id}-prepare`, title: 'Vorgang vorbereiten', description: 'Daten und fachliche Voraussetzungen werden geprüft und aufbereitet.', owner: `Team ${entry.domain}`, department: entry.domain,
+          risk: processIndex % 3 === 0 ? 'high' : 'medium', toolIds: mode.startsWith('ai_') ? ['safair-guard'] : [], humanApproval: mode === 'ai_autonomous', control: 'Plausibilitäts- und Berechtigungsprüfung.', workflowType: mode.startsWith('ai_') ? 'ai' : 'task', bpmnElementType: mode === 'rule_automated' ? 'bpmn:BusinessRuleTask' : mode.startsWith('ai_') ? 'bpmn:ServiceTask' : 'bpmn:Task', executionMode: mode, automationPotential: mode === 'manual' ? (processIndex % 2 ? 'partial' : 'full') : 'full'
+        },
+        {
+          id: `${id}-decide`, title: 'Ergebnis prüfen', description: 'Ergebnis, Risiken und erforderliche Freigaben werden bewertet.', owner: `Process Owner ${entry.domain}`, department: entry.domain,
+          risk: 'high', toolIds: mode.startsWith('ai_') ? ['gpt-4o'] : [], humanApproval: true, control: 'Vier-Augen-Prüfung bei wesentlichen Entscheidungen.', workflowType: 'approval', bpmnElementType: 'bpmn:UserTask', executionMode: mode === 'ai_autonomous' ? 'ai_assisted' : 'manual', automationPotential: 'partial'
+        },
+        {
+          id: `${id}-end`, title: 'Ergebnis übergeben', description: 'Das freigegebene Ergebnis wird nachvollziehbar übergeben.', owner: `Team ${entry.domain}`, department: entry.domain,
+          risk: 'low', toolIds: [], humanApproval: false, control: 'Übergabe und Abschluss protokollieren.', workflowType: 'end', bpmnElementType: 'bpmn:EndEvent', executionMode: 'manual', automationPotential: 'none'
+        }
+      ]
+    }
+  })
+}
+
 const cloneDefaults = () => normalizeProcesses(JSON.parse(JSON.stringify(defaultProcesses)) as RawBusinessProcess[])
-const storageKey = 'safair-process-map-v2'
+const cloneComplexDemo = () => normalizeProcesses(complexDemoProcesses())
+export const createComplexDemoProcesses = () => cloneComplexDemo()
+const storageKey = 'safair-process-map-v3'
+const previousStorageKey = 'safair-process-map-v2'
 const legacyStorageKey = 'safair-process-map-v1'
+
+export function isBpmnActivity(step: ProcessStep): boolean {
+  return activityBpmnTypes.has(step.bpmnElementType)
+}
+
+export function calculateProcessMetrics(input: Array<BusinessProcess | ProcessStep>): ProcessMapMetrics {
+  const steps = input.flatMap((entry) => 'steps' in entry ? entry.steps : [entry]).filter(isBpmnActivity)
+  const automated = steps.filter((step) => step.executionMode !== 'manual')
+  const ai = steps.filter((step) => step.executionMode === 'ai_assisted' || step.executionMode === 'ai_autonomous')
+  const manual = steps.filter((step) => step.executionMode === 'manual')
+  const potential = manual.filter((step) => step.automationPotential === 'partial' || step.automationPotential === 'full')
+  const governed = steps.filter((step) => step.owner.trim() && step.control.trim() && (step.risk !== 'high' || step.humanApproval))
+  const percent = (part: number, total: number) => total ? Math.round((part / total) * 100) : 0
+  return {
+    activities: steps.length,
+    automatedActivities: automated.length,
+    aiActivities: ai.length,
+    manualActivities: manual.length,
+    potentialActivities: potential.length,
+    aiAutonomousActivities: ai.filter((step) => step.executionMode === 'ai_autonomous').length,
+    aiHumanApprovalActivities: ai.filter((step) => step.humanApproval).length,
+    automationRate: percent(automated.length, steps.length),
+    aiShare: percent(ai.length, steps.length),
+    automationPotential: percent(potential.length, manual.length),
+    aiAutonomy: percent(ai.filter((step) => step.executionMode === 'ai_autonomous').length, ai.length),
+    humanOversight: percent(ai.filter((step) => step.humanApproval).length, ai.length),
+    governanceScore: percent(governed.length, steps.length)
+  }
+}
 
 export function useProcessMap() {
   const processes = useState<BusinessProcess[]>('business-processes', cloneDefaults)
+  const bpmnDocuments = useState<BpmnDocument[]>('bpmn-documents', () => [])
+  const demoPreset = useState<DemoPreset>('process-demo-preset', () => 'compact')
   const storageLoaded = useState<boolean>('business-processes-loaded', () => false)
 
   onMounted(() => {
@@ -454,16 +640,18 @@ export function useProcessMap() {
     try {
       const stored = localStorage.getItem(storageKey)
       if (stored) {
-        processes.value = normalizeProcesses(JSON.parse(stored) as RawBusinessProcess[])
+        const parsed = JSON.parse(stored) as { processes?: RawBusinessProcess[]; bpmnDocuments?: BpmnDocument[]; demoPreset?: DemoPreset }
+        processes.value = normalizeProcesses(parsed.processes ?? [])
+        bpmnDocuments.value = Array.isArray(parsed.bpmnDocuments) ? parsed.bpmnDocuments : []
+        demoPreset.value = parsed.demoPreset ?? 'custom'
       } else {
-        const legacy = localStorage.getItem(legacyStorageKey)
+        const legacy = localStorage.getItem(previousStorageKey) ?? localStorage.getItem(legacyStorageKey)
         if (legacy) {
           const migrated = normalizeProcesses(JSON.parse(legacy) as RawBusinessProcess[])
-          const existingIds = new Set(migrated.map((process) => process.id))
-          const newDefaults = cloneDefaults().filter((process) => !existingIds.has(process.id))
-          processes.value = [...migrated, ...newDefaults]
+          processes.value = migrated
+          demoPreset.value = 'custom'
         }
-        localStorage.setItem(storageKey, JSON.stringify(processes.value))
+        localStorage.setItem(storageKey, JSON.stringify({ processes: processes.value, bpmnDocuments: [], demoPreset: demoPreset.value }))
       }
     } catch {
       // Keep the curated defaults when browser data is unavailable or invalid.
@@ -471,23 +659,21 @@ export function useProcessMap() {
     storageLoaded.value = true
   })
 
-  watch(processes, (value) => {
+  watch([processes, bpmnDocuments, demoPreset], () => {
     if (!import.meta.client || !storageLoaded.value) return
-    localStorage.setItem(storageKey, JSON.stringify(value))
+    localStorage.setItem(storageKey, JSON.stringify({ processes: processes.value, bpmnDocuments: bpmnDocuments.value, demoPreset: demoPreset.value }))
   }, { deep: true })
 
-  const totalSteps = computed(() => processes.value.reduce((sum, process) => sum + process.steps.length, 0))
-  const aiEnabledSteps = computed(() => processes.value.reduce(
-    (sum, process) => sum + process.steps.filter((step) => step.toolIds.length > 0).length,
-    0
-  ))
-  const coverage = computed(() => totalSteps.value ? Math.round((aiEnabledSteps.value / totalSteps.value) * 100) : 0)
+  const metrics = computed(() => calculateProcessMetrics(processes.value))
+  const totalSteps = computed(() => metrics.value.activities)
+  const aiEnabledSteps = computed(() => metrics.value.aiActivities)
+  const coverage = computed(() => metrics.value.aiShare)
   const assignedToolIds = computed(() => new Set(
     processes.value.flatMap((process) => process.steps.flatMap((step) => step.toolIds))
   ))
   const openHighRisks = computed(() => processes.value.flatMap((process) =>
     process.steps
-      .filter((step) => step.risk === 'high' && (!step.humanApproval || step.toolIds.length === 0))
+      .filter((step) => step.risk === 'high' && (!step.control.trim() || (step.executionMode.startsWith('ai_') && !step.humanApproval)))
       .map((step) => ({ process, step }))
   ))
 
@@ -495,10 +681,16 @@ export function useProcessMap() {
     return aiToolCatalog.find((tool) => tool.id === id)
   }
 
+  function markCustom() {
+    demoPreset.value = 'custom'
+  }
+
   function toggleTool(step: ProcessStep, toolId: string) {
     const index = step.toolIds.indexOf(toolId)
     if (index >= 0) step.toolIds.splice(index, 1)
     else step.toolIds.push(toolId)
+    synchronizeExecutionModeForModelTool(step, toolId)
+    markCustom()
   }
 
   function addProcess(name: string, owner: string, landscapeLayer: LandscapeLayer = 'support', domain = 'Fachbereich') {
@@ -526,17 +718,25 @@ export function useProcessMap() {
           humanApproval: true,
           control: 'Kontrollmaßnahme definieren.',
           workflowType: 'trigger',
+          bpmnElementType: 'bpmn:StartEvent',
+          executionMode: 'manual',
+          automationPotential: 'none',
           position: { x: 80, y: 160 }
         }
       ],
       connections: []
     })
+    markCustom()
     return id
   }
 
   function addStep(process: BusinessProcess) {
     const previous = process.steps.at(-1)
-    if (previous?.workflowType === 'end') previous.workflowType = 'task'
+    if (previous?.workflowType === 'end') {
+      previous.workflowType = 'task'
+      previous.bpmnElementType = 'bpmn:Task'
+      previous.automationPotential = 'partial'
+    }
     const step: ProcessStep = {
       id: `${process.id}-step-${Date.now()}`,
       title: `Prozessschritt ${process.steps.length + 1}`,
@@ -548,10 +748,14 @@ export function useProcessMap() {
       humanApproval: true,
       control: 'Kontrollmaßnahme definieren.',
       workflowType: 'end',
+      bpmnElementType: 'bpmn:EndEvent',
+      executionMode: 'manual',
+      automationPotential: 'none',
       position: { x: Math.max(80, ...process.steps.map((item) => item.position.x + 270)), y: 160 }
     }
     process.steps.push(step)
     if (previous) addConnection(process, { source: previous.id, target: step.id })
+    markCustom()
     return step
   }
 
@@ -576,12 +780,18 @@ export function useProcessMap() {
       humanApproval: workflowType === 'approval',
       control: workflowType === 'approval' ? 'Manuelle Freigabe dokumentieren.' : 'Kontrollmaßnahme definieren.',
       workflowType,
+      bpmnElementType: inferBpmnElementType({
+        id, title: labels[workflowType], description: '', owner: process.owner, department: '', risk: 'medium', toolIds: [], humanApproval: workflowType === 'approval', control: ''
+      }, workflowType),
+      executionMode: workflowType === 'ai' ? 'ai_assisted' : 'manual',
+      automationPotential: workflowType === 'task' || workflowType === 'approval' ? 'partial' : workflowType === 'ai' ? 'full' : 'none',
       position: {
         x: Math.max(80, ...process.steps.map((item) => item.position.x + 270)),
         y: 140 + (process.steps.length % 3) * 70
       }
     }
     process.steps.push(step)
+    markCustom()
     return step
   }
 
@@ -611,12 +821,14 @@ export function useProcessMap() {
       label: condition === 'yes' ? 'Ja' : condition === 'no' ? 'Nein' : undefined
     }
     process.connections.push(edge)
+    markCustom()
     return edge
   }
 
   function removeConnection(process: BusinessProcess, connectionId: string) {
     const index = process.connections.findIndex((edge) => edge.id === connectionId)
     if (index >= 0) process.connections.splice(index, 1)
+    markCustom()
   }
 
   function removeStep(process: BusinessProcess, stepId: string) {
@@ -625,20 +837,37 @@ export function useProcessMap() {
     if (index < 0) return false
     process.steps.splice(index, 1)
     process.connections = process.connections.filter((edge) => edge.source !== stepId && edge.target !== stepId)
+    markCustom()
     return true
   }
 
   function updateStepPosition(process: BusinessProcess, stepId: string, position: WorkflowPosition) {
     const step = process.steps.find((item) => item.id === stepId)
     if (step) step.position = { x: Math.round(position.x), y: Math.round(position.y) }
+    markCustom()
   }
 
   function resetProcesses() {
-    processes.value = cloneDefaults()
+    loadDemoPreset('compact')
   }
 
-  function addImportedProcesses(importedProcesses: BusinessProcess[]) {
+  function loadDemoPreset(preset: Exclude<DemoPreset, 'custom'>) {
+    processes.value = preset === 'complex' ? cloneComplexDemo() : cloneDefaults()
+    bpmnDocuments.value = []
+    demoPreset.value = preset
+  }
+
+  function addImportedProcesses(importedProcesses: BusinessProcess[], document?: BpmnDocument) {
     const importedIds: string[] = []
+    const documentClone = document ? JSON.parse(JSON.stringify(document)) as BpmnDocument : null
+    if (documentClone) {
+      let documentId = documentClone.id || `bpmn-document-${Date.now()}`
+      let suffix = 2
+      while (bpmnDocuments.value.some((item) => item.id === documentId)) documentId = `${documentClone.id}-${suffix++}`
+      documentClone.id = documentId
+      documentClone.updatedAt = new Date().toISOString()
+      bpmnDocuments.value.push(documentClone)
+    }
     for (const imported of importedProcesses) {
       const clone = JSON.parse(JSON.stringify(imported)) as BusinessProcess
       const baseId = clone.id || `imported-process-${Date.now()}`
@@ -646,10 +875,49 @@ export function useProcessMap() {
       let suffix = 2
       while (processes.value.some((process) => process.id === id)) id = `${baseId}-${suffix++}`
       clone.id = id
+      if (documentClone) clone.bpmnDocumentId = documentClone.id
       processes.value.push(clone)
       importedIds.push(id)
     }
+    markCustom()
     return importedIds
+  }
+
+  function getBpmnDocument(process: BusinessProcess | undefined) {
+    if (!process?.bpmnDocumentId) return undefined
+    return bpmnDocuments.value.find((document) => document.id === process.bpmnDocumentId)
+  }
+
+  function setBpmnDocument(process: BusinessProcess, xml: string, processRefs = [process.bpmnProcessRef || process.id]) {
+    let document = getBpmnDocument(process)
+    if (!document) {
+      document = {
+        id: `bpmn-document-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        xml,
+        processRefs,
+        updatedAt: new Date().toISOString()
+      }
+      bpmnDocuments.value.push(document)
+      process.bpmnDocumentId = document.id
+    } else {
+      document.xml = xml
+      document.processRefs = processRefs
+      document.updatedAt = new Date().toISOString()
+    }
+    markCustom()
+    return document
+  }
+
+  function updateProcessesFromDocument(documentId: string, importedProcesses: BusinessProcess[]) {
+    for (const imported of importedProcesses) {
+      const existing = processes.value.find((process) => process.bpmnDocumentId === documentId && process.bpmnProcessRef === imported.bpmnProcessRef)
+        ?? processes.value.find((process) => process.bpmnDocumentId === documentId && process.id === imported.id)
+      if (!existing) continue
+      existing.steps = imported.steps
+      existing.connections = imported.connections
+      existing.name = imported.name || existing.name
+    }
+    markCustom()
   }
 
   function addProcessRelation(
@@ -672,6 +940,7 @@ export function useProcessMap() {
       label: label || 'Prozessübergabe'
     }
     source.relations.push(relation)
+    markCustom()
     return relation
   }
 
@@ -680,11 +949,15 @@ export function useProcessMap() {
     if (!source) return
     const index = source.relations.findIndex((relation) => relation.id === relationId)
     if (index >= 0) source.relations.splice(index, 1)
+    markCustom()
   }
 
   return {
     processes,
+    bpmnDocuments,
+    demoPreset,
     tools: aiToolCatalog,
+    metrics,
     totalSteps,
     aiEnabledSteps,
     coverage,
@@ -700,8 +973,13 @@ export function useProcessMap() {
     removeStep,
     updateStepPosition,
     addImportedProcesses,
+    getBpmnDocument,
+    setBpmnDocument,
+    updateProcessesFromDocument,
     addProcessRelation,
     removeProcessRelation,
-    resetProcesses
+    resetProcesses,
+    loadDemoPreset,
+    markCustom
   }
 }

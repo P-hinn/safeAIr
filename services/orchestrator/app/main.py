@@ -2,11 +2,19 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from . import db, providers
 from .pipeline import run_pipeline
+from .process_generation import (
+    InvalidDraftError,
+    ProcessGenerationRequest,
+    ProviderNotConfiguredError,
+    ProviderResponseError,
+    generate_process_draft,
+    transcribe_audio,
+)
 
 SERVICE_NAME = "orchestrator"
 
@@ -18,6 +26,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="safAIr Orchestrator", version="0.1.0", lifespan=lifespan)
+MAX_AUDIO_BYTES = 20 * 1024 * 1024
+SUPPORTED_AUDIO_TYPES = {"audio/webm", "audio/mp4", "video/webm", "video/mp4"}
 
 
 class ChatMessage(BaseModel):
@@ -87,3 +97,49 @@ def chat(req: ChatRequest):
         provider_override=req.provider,
         model_override=req.model,
     )
+
+
+def _process_error(error: Exception):
+    if isinstance(error, ProviderNotConfiguredError):
+        raise HTTPException(
+            status_code=503,
+            detail={"error": {"code": "provider_not_configured", "message": str(error)}},
+        ) from error
+    if isinstance(error, InvalidDraftError):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "invalid_process_draft", "message": str(error)}},
+        ) from error
+    raise HTTPException(
+        status_code=502,
+        detail={"error": {"code": "provider_error", "message": str(error)}},
+    ) from error
+
+
+@app.post("/v1/processes/generate")
+async def generate_process(request: ProcessGenerationRequest):
+    try:
+        return await generate_process_draft(request)
+    except Exception as error:
+        _process_error(error)
+
+
+@app.post("/v1/audio/transcriptions")
+async def create_transcription(audio: UploadFile = File(...)):
+    content_type = (audio.content_type or "").split(";", 1)[0].lower()
+    if content_type not in SUPPORTED_AUDIO_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "invalid_audio_type", "message": "Unterstützt werden WebM- und MP4-Audiodateien."}},
+        )
+    content = await audio.read(MAX_AUDIO_BYTES + 1)
+    await audio.close()
+    if not content or len(content) > MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": {"code": "invalid_audio_size", "message": "Die Audiodatei darf höchstens 20 MB groß sein."}},
+        )
+    try:
+        return await transcribe_audio(audio.filename or "sprachnotiz.webm", content, content_type)
+    except Exception as error:
+        _process_error(error)

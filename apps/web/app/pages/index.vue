@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { calculateProcessMetrics } from '~/composables/useProcessMap'
+
 const config = useRuntimeConfig()
 const {
   processes,
+  metrics,
   totalSteps,
   aiEnabledSteps,
   coverage,
@@ -24,17 +27,6 @@ const today = new Intl.DateTimeFormat('de-DE', {
   weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
 }).format(new Date())
 
-const governanceScore = computed(() => {
-  const steps = processes.value.flatMap((process) => process.steps)
-  if (!steps.length) return 0
-  const controlled = steps.filter((step) => step.control.trim().length > 12).length
-  const highRiskSteps = steps.filter((step) => step.risk === 'high')
-  const protectedHighRisks = highRiskSteps.filter((step) => step.humanApproval).length
-  const controlScore = controlled / steps.length
-  const approvalScore = highRiskSteps.length ? protectedHighRisks / highRiskSteps.length : 1
-  return Math.round((controlScore * 0.55 + approvalScore * 0.45) * 100)
-})
-
 const onlineServices = computed(() => {
   if (!data.value?.services) return 0
   return Object.values(data.value.services).filter((service) => service.status === 'ok').length
@@ -42,10 +34,7 @@ const onlineServices = computed(() => {
 
 const totalServices = computed(() => Object.keys(data.value?.services ?? {}).length)
 
-const processCoverage = (process: (typeof processes.value)[number]) => {
-  if (!process.steps.length) return 0
-  return Math.round(process.steps.filter((step) => step.toolIds.length).length / process.steps.length * 100)
-}
+const processMetrics = (process: (typeof processes.value)[number]) => calculateProcessMetrics([process])
 
 const processToolCount = (process: (typeof processes.value)[number]) =>
   new Set(process.steps.flatMap((step) => step.toolIds)).size
@@ -57,7 +46,7 @@ const attentionItems = computed(() => {
     items.push({
       level: 'high',
       title: `Governance-Lücke: ${issue.step.title}`,
-      detail: `${issue.process.name} · Kritischer Schritt ohne vollständige Tool-Abdeckung.`,
+      detail: `${issue.process.name} · Kritische Aktivität ohne vollständige Kontrolle oder erforderliche Human-Freigabe.`,
       processId: issue.process.id
     })
   }
@@ -126,9 +115,31 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.5 6.5a4 4 0 0 0-5-5l2 2-3 3-2-2a4 4 0 0 0 5 5L19 17l-2 2-7.5-7.5"/></svg>
         </div>
         <div class="kpi-content">
-          <span>Eingesetzte KI-Tools</span>
-          <strong>{{ assignedToolIds.size }}</strong>
-          <small><b>{{ aiEnabledSteps }}</b> von {{ totalSteps }} Schritten unterstützt</small>
+          <span>Automatisierungsgrad</span>
+          <strong>{{ metrics.automationRate }}%</strong>
+          <small><b>{{ metrics.automatedActivities }}</b> von {{ metrics.activities }} Aktivitäten</small>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-icon kpi-icon--purple">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3M5.6 5.6l2.1 2.1M3 12h3M18 12h3M16.3 7.7l2.1-2.1"/><rect x="7" y="8" width="10" height="11" rx="3"/><path d="M10 13h.01M14 13h.01M10 16h4"/></svg>
+        </div>
+        <div class="kpi-content">
+          <span>KI-Anteil</span>
+          <strong>{{ metrics.aiShare }}%</strong>
+          <small><b>{{ metrics.aiActivities }}</b> KI-assistierte oder autonome Aktivitäten</small>
+        </div>
+      </article>
+
+      <article class="kpi-card">
+        <div class="kpi-icon kpi-icon--blue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17 10 11l4 4 6-8"/><path d="M14 7h6v6"/></svg>
+        </div>
+        <div class="kpi-content">
+          <span>Automatisierungspotenzial</span>
+          <strong>{{ metrics.automationPotential }}%</strong>
+          <small><b>{{ metrics.potentialActivities }}</b> manuelle Aktivitäten automatisierbar</small>
         </div>
       </article>
 
@@ -138,7 +149,7 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
         </div>
         <div class="kpi-content">
           <span>Governance Score</span>
-          <strong>{{ governanceScore }}<em>/100</em></strong>
+          <strong>{{ metrics.governanceScore }}<em>/100</em></strong>
           <small><b>Kontrollen</b> in allen Prozessen dokumentiert</small>
         </div>
       </article>
@@ -167,14 +178,15 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
         </div>
 
         <div class="coverage-summary">
-          <div class="score-ring" :style="{ '--score': `${coverage * 3.6}deg` }">
-            <div><strong>{{ coverage }}%</strong><span>AI Coverage</span></div>
+          <div class="score-ring" :style="{ '--score': `${metrics.automationRate * 3.6}deg` }">
+            <div><strong>{{ metrics.automationRate }}%</strong><span>Automatisiert</span></div>
           </div>
           <div class="coverage-copy">
-            <h3>{{ aiEnabledSteps }} von {{ totalSteps }} Prozessschritten sind KI-unterstützt</h3>
-            <p>Zuweisung aktiver Modelle, Safety- und Monitoring-Tools über die gesamte Prozesslandschaft.</p>
+            <h3>Automatisierung und KI werden getrennt ausgewiesen</h3>
+            <p>{{ metrics.automatedActivities }} Aktivitäten sind technisch automatisiert; {{ metrics.aiActivities }} davon arbeiten KI-assistiert oder KI-autonom. Safety- und Datenschutztools erhöhen den KI-Anteil nicht.</p>
             <div class="coverage-legend">
-              <span><i class="legend-dot legend-dot--blue" /> KI-unterstützt</span>
+              <span><i class="legend-dot legend-dot--blue" /> Automatisiert</span>
+              <span><i class="legend-dot legend-dot--purple" /> KI {{ metrics.aiShare }}%</span>
               <span><i class="legend-dot" /> Manuell</span>
             </div>
           </div>
@@ -193,10 +205,10 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
                 <strong>{{ process.name }}</strong>
                 <span class="status-pill" :class="process.status === 'active' ? 'status-ok' : process.status === 'pilot' ? 'status-warn' : 'status-neutral'">{{ statusLabel(process.status) }}</span>
               </div>
-              <div class="progress-line"><span :style="{ width: `${processCoverage(process)}%` }" /></div>
+              <div class="progress-line"><span :style="{ width: `${processMetrics(process).automationRate}%` }" /></div>
             </div>
-            <div class="process-stat"><strong>{{ processCoverage(process) }}%</strong><span>Abdeckung</span></div>
-            <div class="process-stat"><strong>{{ processToolCount(process) }}</strong><span>Tools</span></div>
+            <div class="process-stat"><strong>{{ processMetrics(process).automationRate }}%</strong><span>Autom.</span></div>
+            <div class="process-stat"><strong>{{ processMetrics(process).aiShare }}%</strong><span>KI</span></div>
             <svg class="row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
           </NuxtLink>
         </div>
@@ -254,7 +266,7 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
 .report-date { color: var(--muted); font-size: 13px; text-transform: capitalize; }
 .button svg { width: 15px; }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-bottom: 28px; border: 1px solid var(--border-strong); background: var(--surface); }
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-bottom: 28px; border: 1px solid var(--border-strong); background: var(--surface); }
 .kpi-card { min-width: 0; min-height: 150px; padding: 24px; display: flex; align-items: flex-start; gap: 16px; background: var(--surface); border: 0; border-left: 1px solid var(--border-strong); border-radius: 0; box-shadow: none; }
 .kpi-card:first-child { border-left: 0; }
 .kpi-card:nth-child(even) { background: var(--surface-muted); }
@@ -290,6 +302,7 @@ const statusLabel = (status: string) => status === 'active' ? 'Produktiv' : stat
 .coverage-legend { margin-top: 16px; display: flex; gap: 18px; color: #4f4e48; font-size: 11.5px; font-weight: 650; }
 .legend-dot { width: 7px; height: 7px; display: inline-block; margin-right: 5px; border-radius: 50%; background: #d5dce7; }
 .legend-dot--blue { background: var(--ink); }
+.legend-dot--purple { background: var(--purple); }
 
 .process-list { padding: 7px 22px 13px; }
 .process-row { min-height: 76px; display: flex; align-items: center; gap: 13px; border-top: 1px solid var(--border); text-decoration: none; transition: background 150ms; }

@@ -2,7 +2,9 @@
 const route = useRoute()
 const config = useRuntimeConfig()
 const mobileNavOpen = ref(false)
+const sidebarCollapsed = ref(false)
 const onboardingTour = ref<{ start: () => void }>()
+let collapsedBeforeTour = false
 
 const apiDocsUrl = computed(() => {
   const apiBase = String(config.public.apiBase || '').replace(/\/+$/, '')
@@ -46,13 +48,37 @@ const pageTitle = computed(() => {
 })
 
 watch(() => route.path, () => { mobileNavOpen.value = false })
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+function handleTourNavigation(visible: boolean) {
+  if (visible) {
+    collapsedBeforeTour = sidebarCollapsed.value
+    sidebarCollapsed.value = false
+    if (window.innerWidth <= 980) mobileNavOpen.value = true
+  } else {
+    mobileNavOpen.value = false
+    sidebarCollapsed.value = collapsedBeforeTour
+  }
+}
+
+onMounted(() => {
+  try { sidebarCollapsed.value = localStorage.getItem('safair:sidebar-collapsed') === 'true' } catch { /* optional preference */ }
+})
+
+watch(sidebarCollapsed, (value) => {
+  if (!import.meta.client) return
+  try { localStorage.setItem('safair:sidebar-collapsed', String(value)) } catch { /* optional preference */ }
+})
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--collapsed': sidebarCollapsed }">
     <div v-if="mobileNavOpen" class="nav-backdrop" @click="mobileNavOpen = false" />
 
-    <aside class="sidebar" :class="{ 'sidebar--open': mobileNavOpen }">
+    <aside class="sidebar" data-onboarding="sidebar-shell" :class="{ 'sidebar--open': mobileNavOpen, 'sidebar--collapsed': sidebarCollapsed }">
       <div class="brand-block">
         <NuxtLink to="/" class="brand" aria-label="safAIr Startseite">
           <span class="brand-mark">sA</span>
@@ -62,6 +88,7 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
           </span>
         </NuxtLink>
         <button class="mobile-close" aria-label="Navigation schließen" @click="mobileNavOpen = false">×</button>
+        <button class="sidebar-collapse" data-onboarding="sidebar-collapse" :aria-label="sidebarCollapsed ? 'Sidebar ausklappen' : 'Sidebar einklappen'" :title="sidebarCollapsed ? 'Sidebar ausklappen' : 'Sidebar einklappen'" @click="toggleSidebar">{{ sidebarCollapsed ? '›' : '‹' }}</button>
       </div>
 
       <nav class="side-nav" aria-label="Hauptnavigation">
@@ -77,6 +104,7 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
             :key="item.to"
             :to="item.to"
             class="nav-item"
+            :title="sidebarCollapsed ? item.label : undefined"
             :data-onboarding="item.to === '/' ? 'dashboard-link' : item.to === '/process-map' ? 'process-map-link' : item.to === '/monitoring' ? 'monitoring-link' : undefined"
           >
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -170,7 +198,8 @@ watch(() => route.path, () => { mobileNavOpen.value = false })
 
     <OnboardingTour
       ref="onboardingTour"
-      @navigation-visibility="mobileNavOpen = $event"
+      :version="2"
+      @navigation-visibility="handleTourNavigation"
     />
   </div>
 </template>
@@ -245,7 +274,19 @@ a { color: inherit; }
   background: var(--sidebar);
   color: var(--ink);
   overflow-y: auto;
+  transition: width 180ms ease, transform 200ms ease;
 }
+
+.sidebar--collapsed { width: 72px; overflow-x: hidden; }
+.sidebar--collapsed .brand-block { padding-inline: 16px; justify-content: center; }
+.sidebar--collapsed .brand > span:last-child, .sidebar--collapsed .nav-group-label, .sidebar--collapsed .nav-item > span, .sidebar--collapsed .system-indicator, .sidebar--collapsed .sidebar-footer > p { display: none; }
+.sidebar--collapsed .side-nav { padding-inline: 9px; }
+.sidebar--collapsed .nav-group + .nav-group { margin-top: 12px; }
+.sidebar--collapsed .nav-item { padding: 0; justify-content: center; }
+.sidebar--collapsed .sidebar-footer { padding: 12px 9px; }
+.sidebar--collapsed .onboarding-restart { padding: 0; justify-content: center; font-size: 0; }
+.sidebar-collapse { width: 25px; min-height: 31px; padding: 0; position: absolute; z-index: 2; top: 23px; right: -1px; border-radius: 16px 0 0 16px; border-color: var(--border-strong); background: var(--paper); color: var(--ink); font-size: 20px; }
+.sidebar-collapse:hover { background: var(--acid); color: var(--ink); transform: none; }
 
 .brand-block {
   min-height: 78px;
@@ -317,7 +358,8 @@ a { color: inherit; }
 .onboarding-restart:hover { border-color: var(--ink); background: var(--acid); color: var(--ink); transform: none; }
 .onboarding-restart svg { width: 15px; height: 15px; flex: 0 0 auto; }
 
-.workspace { width: calc(100% - 244px); min-width: 0; min-height: 100vh; margin-left: 244px; background: var(--workspace); }
+.workspace { width: calc(100% - 244px); min-width: 0; min-height: 100vh; margin-left: 244px; background: var(--workspace); transition: width 180ms ease, margin-left 180ms ease; }
+.app-shell--collapsed .workspace { width: calc(100% - 72px); margin-left: 72px; }
 .topbar {
   position: sticky;
   z-index: 20;
@@ -419,9 +461,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .nav-backdrop { display: none; }
 
 @media (max-width: 980px) {
-  .sidebar { transform: translateX(-100%); box-shadow: 20px 0 50px rgba(23,23,20,.2); transition: transform 200ms ease; }
+  .sidebar, .sidebar--collapsed { width: 244px; transform: translateX(-100%); box-shadow: 20px 0 50px rgba(23,23,20,.2); }
   .sidebar--open { transform: translateX(0); }
-  .workspace { width: 100%; margin-left: 0; }
+  .workspace, .app-shell--collapsed .workspace { width: 100%; margin-left: 0; }
+  .sidebar--collapsed .brand-block { padding: 16px 18px; justify-content: space-between; }
+  .sidebar--collapsed .brand > span:last-child, .sidebar--collapsed .nav-item > span { display: inline; }
+  .sidebar--collapsed .nav-group-label, .sidebar--collapsed .sidebar-footer > p { display: block; }
+  .sidebar--collapsed .system-indicator { display: flex; }
+  .sidebar--collapsed .nav-item { padding: 0 11px; justify-content: flex-start; }
+  .sidebar--collapsed .side-nav { padding: 18px 12px 24px; }
+  .sidebar--collapsed .sidebar-footer { padding: 16px 20px 20px; }
+  .sidebar--collapsed .onboarding-restart { padding: 0 10px; justify-content: flex-start; font-size: 9.5px; }
+  .sidebar-collapse { display: none; }
   .nav-backdrop { position: fixed; z-index: 25; inset: 0; display: block; background: rgba(23,23,20,.48); backdrop-filter: blur(2px); }
   .mobile-menu { width: 34px; min-height: 34px; padding: 8px; display: flex; flex-direction: column; gap: 4px; border: 0; background: transparent; }
   .mobile-menu:hover { background: var(--surface-soft); transform: none; }

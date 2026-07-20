@@ -396,6 +396,36 @@ export const openApiDocument = {
           ...errorResponses
         }
       }
+    },
+    '/api/orchestrator/v1/processes/generate': {
+      post: {
+        tags: ['Orchestrator'],
+        summary: 'BPMN-Prozessentwurf aus Beschreibung erzeugen',
+        description: 'Erzeugt mit OpenAI Structured Outputs einen validierten, noch nicht gespeicherten BPMN-Entwurf. Der Graph wird auf IDs, Referenzen, Start, Ende und Erreichbarkeit geprueft; ein reparierbarer Fehler wird einmal korrigiert.',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ProcessGenerationRequest' } } }
+        },
+        responses: {
+          200: { description: 'Validierter Prozessentwurf mit Aktivitaeten, Flows, Lanes, Annahmen und Warnungen.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProcessDraft' } } } },
+          ...errorResponses
+        }
+      }
+    },
+    '/api/orchestrator/v1/audio/transcriptions': {
+      post: {
+        tags: ['Orchestrator'],
+        summary: 'Sprachnotiz transkribieren',
+        description: 'Akzeptiert WebM oder MP4 bis 20 MB. Audio wird nach der Transkription nicht in safAIr gespeichert.',
+        requestBody: {
+          required: true,
+          content: { 'multipart/form-data': { schema: { type: 'object', required: ['audio'], properties: { audio: { type: 'string', format: 'binary' } } } } }
+        },
+        responses: {
+          200: { description: 'Editierbares Transkript.', content: { 'application/json': { schema: { type: 'object', required: ['text', 'model'], properties: { text: { type: 'string' }, model: { type: 'string' } } } } } },
+          ...errorResponses
+        }
+      }
     }
   },
   components: {
@@ -596,6 +626,26 @@ export const openApiDocument = {
           policy_id: { type: 'string', default: 'standard' },
           provider: { type: 'string', nullable: true },
           model: { type: 'string', nullable: true }
+        }
+      },
+      ProcessGenerationRequest: {
+        type: 'object',
+        required: ['description'],
+        properties: {
+          description: { type: 'string', minLength: 20, maxLength: 20000 },
+          company_context: { type: 'string', nullable: true, maxLength: 8000 }
+        }
+      },
+      ProcessDraft: {
+        type: 'object',
+        required: ['name', 'description', 'owner', 'domain', 'landscape_layer', 'lanes', 'activities', 'flows', 'assumptions', 'warnings'],
+        properties: {
+          name: { type: 'string' }, description: { type: 'string' }, owner: { type: 'string' }, domain: { type: 'string' },
+          landscape_layer: { type: 'string', enum: ['management', 'core', 'support'] },
+          lanes: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string' }, name: { type: 'string' } } } },
+          activities: { type: 'array', items: { type: 'object', additionalProperties: true } },
+          flows: { type: 'array', items: { type: 'object', required: ['id', 'source', 'target'], properties: { id: { type: 'string' }, source: { type: 'string' }, target: { type: 'string' }, label: { type: 'string', nullable: true } } } },
+          assumptions: { type: 'array', items: { type: 'string' } }, warnings: { type: 'array', items: { type: 'string' } }
         }
       },
       MonitorCheck: {

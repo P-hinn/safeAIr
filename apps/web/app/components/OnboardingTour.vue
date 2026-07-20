@@ -22,7 +22,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   steps: undefined,
   storageKey: 'safair:onboarding-tour',
-  version: 1,
+  version: 2,
   autoStart: true,
   autoStartDelay: 650,
   stepDelay: 0
@@ -42,13 +42,13 @@ const defaultSteps: TourStep[] = [
   {
     eyebrow: '01 · Management',
     title: 'Die Lage auf einen Blick',
-    description: 'Das Management Dashboard bündelt Prozessabdeckung, eingesetzte KI-Tools, Governance Score und offene Handlungsfelder.',
+    description: 'Das Management Dashboard trennt Automatisierungsgrad, KI-Anteil und zusätzliches Automatisierungspotenzial und bündelt diese Werte mit Governance Score und Handlungsfeldern.',
     target: '[data-onboarding="dashboard-link"]'
   },
   {
     eyebrow: '02 · Prozesse',
-    title: 'Vom Portfolio bis zum Workflow',
-    description: 'In der Prozesslandkarte sehen Sie Abteilungen und Übergaben. Öffnen Sie einen Prozess, um Schritte, Kontrollen und KI-Tools zuzuweisen.',
+    title: 'Vom Portfolio bis zum nativen BPMN',
+    description: 'In der Prozesslandkarte sehen Sie Abteilungen und Übergaben. Im Designer bearbeiten Sie echtes BPMN, nutzen Aufräumen und Vollbild oder lassen aus Text und Sprache einen prüfbaren Entwurf erzeugen.',
     target: '[data-onboarding="process-map-link"]'
   },
   {
@@ -68,6 +68,12 @@ const defaultSteps: TourStep[] = [
     title: 'API-Dokumentation für Integrationen',
     description: 'Entwickler finden hier die interaktive Swagger-Dokumentation und können geschützte Endpunkte direkt nachvollziehen.',
     target: '[data-onboarding="api-docs-link"]'
+  },
+  {
+    eyebrow: '06 · Navigation',
+    title: 'Mehr Platz mit der Icon-Leiste',
+    description: 'Auf dem Desktop lässt sich die Sidebar dauerhaft einklappen. Während einer Tour öffnet sie sich automatisch und kehrt danach in den gespeicherten Zustand zurück.',
+    target: '[data-onboarding="sidebar-shell"]'
   },
   {
     eyebrow: 'Geschafft',
@@ -90,6 +96,7 @@ const panelStyle = ref<Record<string, string>>({
   transform: 'translate(-50%, -50%)'
 })
 const hasTarget = ref(false)
+let panelObserver: ResizeObserver | undefined
 
 const currentStep = computed(() => tourSteps.value[currentIndex.value] ?? tourSteps.value[0]!)
 const isLastStep = computed(() => currentIndex.value === tourSteps.value.length - 1)
@@ -131,15 +138,16 @@ function placePanel(rect: DOMRect | null) {
   const margin = 16
   const gap = 18
   const width = Math.min(390, viewportWidth - margin * 2)
-  const panelHeight = panel.value?.offsetHeight ?? 300
+  const panelHeight = Math.min(panel.value?.offsetHeight ?? 300, viewportHeight - margin * 2)
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin)
 
   if (!rect || viewportWidth <= 700) {
     panelStyle.value = {
       width: `${width}px`,
       left: `${Math.max(margin, (viewportWidth - width) / 2)}px`,
       top: viewportWidth <= 700
-        ? `${Math.max(margin, viewportHeight - panelHeight - margin)}px`
-        : `${Math.max(margin, (viewportHeight - panelHeight) / 2)}px`
+        ? `${maxTop}px`
+        : `${Math.min(maxTop, Math.max(margin, (viewportHeight - panelHeight) / 2))}px`
     }
     return
   }
@@ -157,7 +165,7 @@ function placePanel(rect: DOMRect | null) {
   panelStyle.value = {
     width: `${width}px`,
     left: `${Math.min(viewportWidth - width - margin, Math.max(margin, left))}px`,
-    top: `${Math.min(viewportHeight - panelHeight - margin, Math.max(margin, top))}px`
+    top: `${Math.min(maxTop, Math.max(margin, top))}px`
   }
 }
 
@@ -175,6 +183,7 @@ async function updatePosition(scrollTarget = false) {
 
   if (scrollTarget) target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
   await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
   const rect = target.getBoundingClientRect()
   const padding = 7
   highlightStyle.value = {
@@ -205,12 +214,20 @@ async function showStep(index: number) {
 
 function start() {
   active.value = true
-  void showStep(0)
+  nextTick(() => {
+    panelObserver?.disconnect()
+    if (panel.value && typeof ResizeObserver !== 'undefined') {
+      panelObserver = new ResizeObserver(() => void updatePosition())
+      panelObserver.observe(panel.value)
+    }
+    void showStep(0)
+  })
 }
 
 function finish(status: StoredTourState['status']) {
   storeState(status)
   active.value = false
+  panelObserver?.disconnect()
   emit('navigationVisibility', false)
 }
 
@@ -249,6 +266,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('resize', handleViewportChange)
   window.removeEventListener('scroll', handleViewportChange, true)
+  panelObserver?.disconnect()
 })
 
 defineExpose({ start })
@@ -323,6 +341,7 @@ defineExpose({ start })
   color: var(--ink);
   box-shadow: 0 28px 90px rgba(0, 0, 0, .32);
   outline: none;
+  overscroll-behavior: contain;
 }
 .tour-meta { display: flex; align-items: center; justify-content: space-between; gap: 18px; color: #354dcc; font-size: 10px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .tour-meta span:last-child { color: var(--ink-soft); letter-spacing: .04em; }
@@ -332,7 +351,7 @@ defineExpose({ start })
 .tour-progress i { flex: 1; }
 .tour-progress i { height: 3px; background: var(--surface-soft); transition: background 160ms ease; }
 .tour-progress i.active { background: var(--blue); }
-.tour-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.tour-actions { margin: 0 -8px -8px; padding: 13px 8px 8px; position: sticky; z-index: 2; bottom: -1px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-top: 1px solid var(--border); background: var(--surface-raised); }
 .tour-actions > div { display: flex; gap: 8px; }
 .tour-panel button { min-height: 38px; padding: 0 13px; font-size: 10px; }
 .tour-panel button:hover { transform: none; }

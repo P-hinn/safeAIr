@@ -6,7 +6,7 @@ import { hasValidSession, protectionConfigured } from './auth.js'
 import { getMonitoringSnapshot, startMonitoring } from './monitoring.js'
 import { registerApiDocumentation } from './swagger.js'
 
-const app = Fastify({ logger: true })
+const app = Fastify({ logger: true, bodyLimit: 21 * 1024 * 1024 })
 
 await app.register(cors, { origin: config.corsOrigins, credentials: true })
 

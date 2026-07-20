@@ -92,6 +92,8 @@ services:
       MODERATION_SERVICE_URL: http://moderation-service:8003
       OLLAMA_URL: ${OLLAMA_URL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_PROCESS_MODEL: ${OPENAI_PROCESS_MODEL:-gpt-5.6-terra}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-4o-transcribe}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DATA_DIR: /data
     volumes:
