@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const { dataFlows, tools } = useProcessMap()
 
 interface EngineInfo {
   name: string
@@ -36,6 +37,9 @@ const roadmap = [
 const statusColor = (s: string) => (s === 'ready' ? 'var(--ok)' : 'var(--muted)')
 const statusLabel = (s: string) =>
   s === 'ready' ? '● aktiv' : s === 'not_configured' ? '○ nicht konfiguriert' : s === 'not_installed' ? '○ nicht installiert' : s
+const referencedFlows = (id: string) => dataFlows.value.filter((flow) =>
+  flow.aiToolId === id || flow.linkedGuardrailIds.includes(id) || (id === 'heuristic' && flow.linkedGuardrailIds.includes('safair-guard'))
+)
 </script>
 
 <template>
@@ -45,6 +49,17 @@ const statusLabel = (s: string) =>
       Alle angebundenen Engines und Tools mit Status. Aktivierungshinweise stehen jeweils dabei –
       Details in <code>docs/tools.md</code>.
     </p>
+
+    <div class="card" style="margin-bottom: 1.5rem">
+      <h2 style="margin-top: 0">Freigegebene AI-Tools</h2>
+      <p style="color: var(--muted); font-size: 0.85rem">Diese Einträge sind die Referenz für Anbieter, Freigabestatus und Risiko in Datenflüssen.</p>
+      <ul style="list-style: none; padding: 0; margin: 0">
+        <li v-for="tool in tools" :key="tool.id" style="display: flex; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-top: 1px solid var(--border)">
+          <span><strong>{{ tool.name }}</strong><small style="color: var(--muted); display: block">{{ tool.vendor }} · {{ tool.category }} · Risiko {{ tool.risk }}</small><NuxtLink v-if="referencedFlows(tool.id).length" to="/process-map" style="color: var(--purple); font-size: 0.75rem">{{ referencedFlows(tool.id).length }} verknüpfte Datenflüsse →</NuxtLink></span>
+          <span :style="{ color: tool.status === 'active' ? 'var(--ok)' : 'var(--warn)', whiteSpace: 'nowrap' }">{{ tool.status === 'active' ? '● freigegeben' : tool.status === 'pilot' ? '◐ Pilot' : '○ geplant' }}</span>
+        </li>
+      </ul>
+    </div>
 
     <div
       v-for="section in [
@@ -69,6 +84,7 @@ const statusLabel = (s: string) =>
             <a v-if="e.docs_url" :href="e.docs_url" target="_blank" style="color: var(--accent)">{{ e.title }}</a>
             <strong v-else>{{ e.title }}</strong>
             <span style="color: var(--muted); font-size: 0.85rem; display: block">{{ e.detail }}</span>
+            <NuxtLink v-if="referencedFlows(e.name).length" to="/process-map" style="color: var(--purple); font-size: 0.75rem; display: block; margin-top: 0.2rem">{{ referencedFlows(e.name).length }} verknüpfte Datenflüsse →</NuxtLink>
           </span>
           <span :style="{ color: statusColor(e.status), whiteSpace: 'nowrap' }">{{ statusLabel(e.status) }}</span>
         </li>

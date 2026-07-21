@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const { dataFlows } = useProcessMap()
 
 interface EngineInfo {
   name: string
@@ -20,6 +21,9 @@ const scope = ref<'prompt' | 'output'>('prompt')
 const result = ref<unknown>(null)
 const loading = ref(false)
 const errorMsg = ref('')
+const protectedFlows = computed(() => dataFlows.value.filter((flow) =>
+  flow.linkedGuardrailIds.includes(engine.value) || (engine.value === 'heuristic' && flow.linkedGuardrailIds.includes('safair-guard'))
+))
 
 async function scan() {
   loading.value = true
@@ -64,6 +68,7 @@ async function scan() {
         <button :disabled="loading || !prompt" @click="scan">
           {{ loading ? 'Prüfe …' : 'Prüfen' }}
         </button>
+        <NuxtLink v-if="protectedFlows.length" to="/process-map" style="color: var(--purple); font-size: 0.8rem">{{ protectedFlows.length }} geschützte Datenflüsse →</NuxtLink>
       </div>
 
       <p v-if="errorMsg" style="color: var(--err)">{{ errorMsg }}</p>

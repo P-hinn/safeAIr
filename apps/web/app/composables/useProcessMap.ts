@@ -7,12 +7,39 @@ export type ProcessRelationType = 'handoff' | 'governance' | 'support' | 'data'
 export type ExecutionMode = 'manual' | 'rule_automated' | 'ai_assisted' | 'ai_autonomous'
 export type AutomationPotential = 'none' | 'partial' | 'full'
 export type DemoPreset = 'compact' | 'complex' | 'custom'
+export type DataSensitivity = 'unclassified' | 'public' | 'internal' | 'confidential' | 'personal'
+export type DataFlowDirection = 'inbound' | 'outbound' | 'internal'
+export type DataFlowAiRole = 'ai_input' | 'retrieval_context' | 'ai_output' | 'tool_to_tool' | 'training_or_evaluation'
+export type DataFlowControlStatus = 'covered' | 'review_required' | 'blocked'
+export type DataFlowMonitoringStatus = 'not_connected' | 'expected' | 'observed' | 'deviation'
 
 export interface ProcessRelation {
   id: string
   targetId: string
   type: ProcessRelationType
   label: string
+}
+
+export interface DataFlow {
+  id: string
+  label: string
+  sourceProcessId: string
+  targetProcessId?: string
+  sourceStepId?: string
+  sourceSystem: string
+  targetSystem: string
+  aiToolId?: string
+  dataCategories: string[]
+  sensitivity: DataSensitivity
+  direction: DataFlowDirection
+  aiRole: DataFlowAiRole
+  isExternal: boolean
+  owner: string
+  controlStatus: DataFlowControlStatus
+  controlNote: string
+  linkedPolicyIds: string[]
+  linkedGuardrailIds: string[]
+  monitoringStatus: DataFlowMonitoringStatus
 }
 
 export interface WorkflowPosition {
@@ -55,6 +82,18 @@ export interface ProcessStep {
   executionMode: ExecutionMode
   automationPotential: AutomationPotential
   position: WorkflowPosition
+}
+
+export type DataFlowGapType = 'ai_without_input' | 'external_uncontrolled' | 'personal_unprotected' | 'owner_missing' | 'handoff_unclassified'
+
+export interface DataFlowGap {
+  id: string
+  type: DataFlowGapType
+  priority: 'high' | 'medium'
+  processId: string
+  dataFlowId?: string
+  title: string
+  detail: string
 }
 
 export interface BpmnDocument {
@@ -103,6 +142,12 @@ type RawProcessStep = Omit<ProcessStep, 'workflowType' | 'position' | 'bpmnEleme
   bpmnElementType?: string
   executionMode?: ExecutionMode
   automationPotential?: AutomationPotential
+  // Read only while migrating the short-lived v4 step-based data-flow model.
+  dataInput?: string
+  dataOutput?: string
+  dataClassification?: DataSensitivity
+  dataBoundary?: 'unknown' | 'internal' | 'approved_external' | 'unapproved_external'
+  guardrailAction?: 'not_defined' | 'log' | 'mask' | 'block'
 }
 
 type RawBusinessProcess = Omit<BusinessProcess, 'steps' | 'connections' | 'landscapeLayer' | 'domain' | 'relations'> & {
@@ -112,6 +157,8 @@ type RawBusinessProcess = Omit<BusinessProcess, 'steps' | 'connections' | 'lands
   steps: RawProcessStep[]
   connections?: WorkflowConnection[]
 }
+
+type RawDataFlow = Partial<DataFlow> & Pick<DataFlow, 'id' | 'sourceProcessId'>
 
 export const aiToolCatalog: AiTool[] = [
   { id: 'gpt-4o', name: 'GPT-4o', vendor: 'OpenAI', category: 'AI-Modell', status: 'active', risk: 'high', color: '#177b65', initials: 'OA' },
@@ -137,9 +184,7 @@ const defaultProcesses: RawBusinessProcess[] = [
     volume: '12.400 Vorgänge / Monat',
     landscapeLayer: 'core',
     domain: 'Customer Operations',
-    relations: [
-      { id: 'cs-to-gov-reporting', targetId: 'ai-governance', type: 'data', label: 'Qualitäts- und Vorfalldaten' }
-    ],
+    relations: [],
     steps: [
       {
         id: 'cs-intake',
@@ -393,6 +438,109 @@ const defaultProcesses: RawBusinessProcess[] = [
   }
 ]
 
+const defaultDataFlows: DataFlow[] = [
+  {
+    id: 'flow-cs-crm-input',
+    label: 'Kundenanfrage für Klassifizierung',
+    sourceProcessId: 'customer-service',
+    sourceStepId: 'cs-classify',
+    sourceSystem: 'CRM / Service-Postfach',
+    targetSystem: 'Interner Llama-Service',
+    aiToolId: 'llama',
+    dataCategories: ['Kundennachricht', 'Kontaktinformationen'],
+    sensitivity: 'personal',
+    direction: 'inbound',
+    aiRole: 'ai_input',
+    isExternal: false,
+    owner: 'Customer Operations',
+    controlStatus: 'covered',
+    controlNote: 'PII-Redaktion vor der Klassifizierung aktiv.',
+    linkedPolicyIds: ['nur-pii'],
+    linkedGuardrailIds: ['presidio', 'safair-guard'],
+    monitoringStatus: 'expected'
+  },
+  {
+    id: 'flow-cs-llm-draft',
+    label: 'Antwortentwurf über externes LLM',
+    sourceProcessId: 'customer-service',
+    sourceStepId: 'cs-draft',
+    sourceSystem: 'Service Console',
+    targetSystem: 'OpenAI API',
+    aiToolId: 'gpt-4o',
+    dataCategories: ['Maskierte Kundennachricht', 'Freigegebene Wissensartikel'],
+    sensitivity: 'personal',
+    direction: 'outbound',
+    aiRole: 'ai_input',
+    isExternal: true,
+    owner: 'Customer Operations',
+    controlStatus: 'review_required',
+    controlNote: 'PII-Redaktion aktiv; Wirksamkeit des Human Reviews noch bestätigen.',
+    linkedPolicyIds: ['strikt'],
+    linkedGuardrailIds: ['presidio', 'safair-guard'],
+    monitoringStatus: 'expected'
+  },
+  {
+    id: 'flow-marketing-generation',
+    label: 'Kampagnenbriefing an freigegebenes AI-Tool',
+    sourceProcessId: 'marketing-content',
+    sourceStepId: 'mk-create',
+    sourceSystem: 'Campaign Workspace',
+    targetSystem: 'OpenAI API',
+    aiToolId: 'gpt-4o',
+    dataCategories: ['Kampagnenbriefing', 'Markenrichtlinien'],
+    sensitivity: 'internal',
+    direction: 'outbound',
+    aiRole: 'ai_input',
+    isExternal: true,
+    owner: 'Content Studio',
+    controlStatus: 'covered',
+    controlNote: 'Tool-Allowlist und verpflichtende Output-Freigabe aktiv.',
+    linkedPolicyIds: ['standard'],
+    linkedGuardrailIds: ['safair-guard', 'llama-guard'],
+    monitoringStatus: 'expected'
+  },
+  {
+    id: 'flow-recruiting-screening',
+    label: 'Bewerberprofil für AI-Screening',
+    sourceProcessId: 'recruiting',
+    sourceStepId: 'hr-screen',
+    sourceSystem: 'Applicant Tracking System',
+    targetSystem: 'Anthropic API',
+    aiToolId: 'claude',
+    dataCategories: ['Bewerberprofil', 'Lebenslauf'],
+    sensitivity: 'personal',
+    direction: 'outbound',
+    aiRole: 'ai_input',
+    isExternal: true,
+    owner: 'Talent Acquisition',
+    controlStatus: 'review_required',
+    controlNote: 'Keine automatische Auswahlentscheidung; PII-Schutz muss noch verknüpft werden.',
+    linkedPolicyIds: ['strikt'],
+    linkedGuardrailIds: ['safair-guard'],
+    monitoringStatus: 'not_connected'
+  },
+  {
+    id: 'flow-cs-governance-reporting',
+    label: 'Qualitäts- und Vorfalldaten',
+    sourceProcessId: 'customer-service',
+    targetProcessId: 'ai-governance',
+    sourceStepId: 'cs-monitor',
+    sourceSystem: 'Service Monitoring',
+    targetSystem: 'Governance Workspace',
+    dataCategories: ['Qualitätsmetriken', 'Sicherheitsvorfälle'],
+    sensitivity: 'internal',
+    direction: 'internal',
+    aiRole: 'training_or_evaluation',
+    isExternal: false,
+    owner: 'AI Governance',
+    controlStatus: 'covered',
+    controlNote: 'Nur aggregierte Qualitäts- und Vorfalldaten werden übertragen.',
+    linkedPolicyIds: ['standard'],
+    linkedGuardrailIds: ['promptfoo'],
+    monitoringStatus: 'expected'
+  }
+]
+
 const defaultRelations = new Map(defaultProcesses.map((process) => [process.id, process.relations ?? []]))
 const modelToolIds = new Set(['gpt-4o', 'claude', 'llama'])
 const automatedBpmnTypes = new Set(['bpmn:ServiceTask', 'bpmn:ScriptTask', 'bpmn:BusinessRuleTask'])
@@ -494,11 +642,12 @@ function buildDefaultConnections(processId: string, steps: ProcessStep[]): Workf
 function normalizeProcesses(input: RawBusinessProcess[]): BusinessProcess[] {
   return input.map((rawProcess) => {
     const steps: ProcessStep[] = rawProcess.steps.map((rawStep, index) => {
+      const { dataInput: _dataInput, dataOutput: _dataOutput, dataClassification: _dataClassification, dataBoundary: _dataBoundary, guardrailAction: _guardrailAction, ...baseStep } = rawStep
       const workflowType = inferWorkflowType(rawStep, index, rawProcess.steps.length)
       const bpmnElementType = inferBpmnElementType(rawStep, workflowType)
       const executionMode = inferExecutionMode(rawStep, bpmnElementType)
       return {
-        ...rawStep,
+        ...baseStep,
         workflowType,
         bpmnElementType,
         executionMode,
@@ -513,7 +662,7 @@ function normalizeProcesses(input: RawBusinessProcess[]): BusinessProcess[] {
       ...rawProcess,
       landscapeLayer: rawProcess.landscapeLayer ?? 'core',
       domain: rawProcess.domain ?? 'Geschäftsprozesse',
-      relations: (rawProcess.relations ?? defaultRelations.get(rawProcess.id) ?? []).map((relation, index) => ({
+      relations: (rawProcess.relations ?? defaultRelations.get(rawProcess.id) ?? []).filter((relation) => relation.type !== 'data').map((relation, index) => ({
         ...relation,
         id: relation.id || `${rawProcess.id}-relation-${index + 1}`
       })),
@@ -595,13 +744,224 @@ function complexDemoProcesses(): RawBusinessProcess[] {
 
 const cloneDefaults = () => normalizeProcesses(JSON.parse(JSON.stringify(defaultProcesses)) as RawBusinessProcess[])
 const cloneComplexDemo = () => normalizeProcesses(complexDemoProcesses())
+const cloneDefaultDataFlows = () => JSON.parse(JSON.stringify(defaultDataFlows)) as DataFlow[]
+
+function complexDemoDataFlows(processes: BusinessProcess[]): DataFlow[] {
+  return processes.flatMap((process, index) => {
+    const step = process.steps.find(isAiDataFlowStep)
+    if (!step) return []
+    const external = index % 3 === 0
+    return [{
+      id: `flow-${process.id}`,
+      label: `${process.name}: KI-Datenstrom`,
+      sourceProcessId: process.id,
+      sourceStepId: step.id,
+      sourceSystem: `${process.domain} Fachsystem`,
+      targetSystem: external ? 'Freigegebener AI-Anbieter' : 'Interne AI-Plattform',
+      aiToolId: step.toolIds.find((id) => modelToolIds.has(id)) || 'gpt-4o',
+      dataCategories: ['Vorgangsdaten', 'Fachlicher Kontext'],
+      sensitivity: index % 5 === 0 ? 'personal' : 'internal',
+      direction: external ? 'outbound' : 'internal',
+      aiRole: 'ai_input',
+      isExternal: external,
+      owner: process.owner,
+      controlStatus: index % 7 === 0 ? 'review_required' : 'covered',
+      controlNote: index % 7 === 0 ? 'Kontrollwirksamkeit im Demo-Szenario prüfen.' : 'Freigegebener Demo-Datenstrom.',
+      linkedPolicyIds: ['standard'],
+      linkedGuardrailIds: index % 5 === 0 ? ['presidio', 'safair-guard'] : ['safair-guard'],
+      monitoringStatus: 'not_connected'
+    } satisfies DataFlow]
+  })
+}
+
+function normalizeStringList(value: unknown): string[] {
+  return Array.isArray(value) ? [...new Set(value.map((item) => String(item).trim()).filter(Boolean))] : []
+}
+
+function normalizeDataFlows(input: RawDataFlow[], processes: BusinessProcess[]): DataFlow[] {
+  const processIds = new Set(processes.map((process) => process.id))
+  return input.flatMap((raw, index) => {
+    if (!raw?.sourceProcessId || !processIds.has(raw.sourceProcessId)) return []
+    const source = processes.find((process) => process.id === raw.sourceProcessId)
+    const sensitivity = ['public', 'internal', 'confidential', 'personal'].includes(String(raw.sensitivity)) ? raw.sensitivity as DataSensitivity : 'unclassified'
+    const direction = ['inbound', 'outbound', 'internal'].includes(String(raw.direction)) ? raw.direction as DataFlowDirection : 'internal'
+    const aiRole = ['ai_input', 'retrieval_context', 'ai_output', 'tool_to_tool', 'training_or_evaluation'].includes(String(raw.aiRole)) ? raw.aiRole as DataFlowAiRole : 'ai_input'
+    const controlStatus = ['covered', 'review_required', 'blocked'].includes(String(raw.controlStatus)) ? raw.controlStatus as DataFlowControlStatus : 'review_required'
+    const monitoringStatus = ['not_connected', 'expected', 'observed', 'deviation'].includes(String(raw.monitoringStatus)) ? raw.monitoringStatus as DataFlowMonitoringStatus : 'not_connected'
+    const targetProcessId = raw.targetProcessId && processIds.has(raw.targetProcessId) ? raw.targetProcessId : undefined
+    const sourceStepId = raw.sourceStepId && source?.steps.some((step) => step.id === raw.sourceStepId) ? raw.sourceStepId : undefined
+    return [{
+      id: raw.id || `data-flow-${index + 1}`,
+      label: raw.label?.trim() || 'Datenfluss',
+      sourceProcessId: raw.sourceProcessId,
+      targetProcessId,
+      sourceStepId,
+      sourceSystem: raw.sourceSystem?.trim() || '',
+      targetSystem: raw.targetSystem?.trim() || '',
+      aiToolId: raw.aiToolId?.trim() || undefined,
+      dataCategories: normalizeStringList(raw.dataCategories),
+      sensitivity,
+      direction,
+      aiRole,
+      isExternal: Boolean(raw.isExternal),
+      owner: raw.owner?.trim() || '',
+      controlStatus,
+      controlNote: raw.controlNote?.trim() || '',
+      linkedPolicyIds: normalizeStringList(raw.linkedPolicyIds),
+      linkedGuardrailIds: normalizeStringList(raw.linkedGuardrailIds),
+      monitoringStatus
+    }]
+  })
+}
+
+function migrateLegacyDataFlows(rawProcesses: RawBusinessProcess[], processes: BusinessProcess[]): DataFlow[] {
+  const migrated: RawDataFlow[] = []
+  for (const rawProcess of rawProcesses) {
+    const process = processes.find((item) => item.id === rawProcess.id)
+    if (!process) continue
+    for (const rawStep of rawProcess.steps) {
+      if (![rawStep.dataInput, rawStep.dataOutput, rawStep.dataClassification, rawStep.dataBoundary, rawStep.guardrailAction].some(Boolean)) continue
+      const step = process.steps.find((item) => item.id === rawStep.id)
+      const external = rawStep.dataBoundary === 'approved_external' || rawStep.dataBoundary === 'unapproved_external'
+      migrated.push({
+        id: `flow-migrated-${rawStep.id}`,
+        label: `${step?.title || rawStep.title}: migrierter Datenstrom`,
+        sourceProcessId: process.id,
+        sourceStepId: rawStep.id,
+        sourceSystem: rawStep.dataInput || '',
+        targetSystem: external ? 'Externer AI-Dienst' : rawStep.dataOutput || 'Internes Zielsystem',
+        aiToolId: rawStep.toolIds.find((id) => modelToolIds.has(id)),
+        dataCategories: [rawStep.dataInput, rawStep.dataOutput].filter(Boolean) as string[],
+        sensitivity: rawStep.dataClassification || 'unclassified',
+        direction: external ? 'outbound' : 'internal',
+        aiRole: 'ai_input',
+        isExternal: external,
+        owner: rawStep.owner,
+        controlStatus: rawStep.guardrailAction === 'not_defined' || !rawStep.guardrailAction ? 'review_required' : 'covered',
+        controlNote: 'Aus der bisherigen schrittbasierten Datenfluss-Dokumentation migriert.',
+        linkedPolicyIds: [],
+        linkedGuardrailIds: rawStep.guardrailAction === 'mask' ? ['presidio'] : rawStep.guardrailAction === 'not_defined' ? [] : ['safair-guard'],
+        monitoringStatus: 'not_connected'
+      })
+    }
+    for (const relation of rawProcess.relations ?? []) {
+      if (relation.type !== 'data') continue
+      migrated.push({
+        id: `flow-migrated-${relation.id}`,
+        label: relation.label || 'Migrierter Prozess-Datenfluss',
+        sourceProcessId: process.id,
+        targetProcessId: relation.targetId,
+        sourceSystem: process.name,
+        targetSystem: processes.find((item) => item.id === relation.targetId)?.name || '',
+        dataCategories: relation.label ? [relation.label] : [],
+        sensitivity: 'unclassified',
+        direction: 'internal',
+        aiRole: 'ai_output',
+        isExternal: false,
+        owner: process.owner,
+        controlStatus: 'review_required',
+        controlNote: 'Aus einer unstrukturierten Datenfluss-Verbindung migriert.',
+        linkedPolicyIds: [],
+        linkedGuardrailIds: [],
+        monitoringStatus: 'not_connected'
+      })
+    }
+  }
+  return normalizeDataFlows(migrated, processes)
+}
+
 export const createComplexDemoProcesses = () => cloneComplexDemo()
-const storageKey = 'safair-process-map-v3'
-const previousStorageKey = 'safair-process-map-v2'
+export const createDefaultDataFlows = () => cloneDefaultDataFlows()
+const storageKey = 'safair-process-map-v5'
+const previousStorageKey = 'safair-process-map-v4'
+const olderV3StorageKey = 'safair-process-map-v3'
+const olderStorageKey = 'safair-process-map-v2'
 const legacyStorageKey = 'safair-process-map-v1'
 
 export function isBpmnActivity(step: ProcessStep): boolean {
   return activityBpmnTypes.has(step.bpmnElementType)
+}
+
+export function isAiDataFlowStep(step: ProcessStep): boolean {
+  return isBpmnActivity(step) && (
+    step.executionMode === 'ai_assisted'
+    || step.executionMode === 'ai_autonomous'
+    || step.toolIds.some((id) => modelToolIds.has(id))
+  )
+}
+
+export function dataFlowIssues(flow: DataFlow): string[] {
+  const issues: string[] = []
+  if (!flow.dataCategories.length) issues.push('Datenkategorien fehlen')
+  if (flow.sensitivity === 'unclassified') issues.push('Sensitivität nicht klassifiziert')
+  if (!flow.owner.trim()) issues.push('Owner fehlt')
+  if (!flow.sourceSystem.trim()) issues.push('Quellsystem fehlt')
+  if (!flow.targetSystem.trim() && !flow.targetProcessId) issues.push('Ziel fehlt')
+  if (flow.isExternal && flow.controlStatus === 'review_required') issues.push('Externe Kontrolle prüfen')
+  const hasPiiProtection = flow.linkedGuardrailIds.some((id) => ['presidio', 'scrubadub'].includes(id))
+  if (flow.sensitivity === 'personal' && !hasPiiProtection) issues.push('PII-Schutz fehlt')
+  if (flow.controlStatus === 'blocked' && !flow.controlNote.trim()) issues.push('Blockiergrund fehlt')
+  return issues
+}
+
+export function analyzeDataFlowGaps(processes: BusinessProcess[], dataFlows: DataFlow[]): DataFlowGap[] {
+  const gaps: DataFlowGap[] = []
+  for (const process of processes) {
+    const isAiProcess = process.steps.some(isAiDataFlowStep)
+    const hasAiInput = dataFlows.some((flow) =>
+      (flow.sourceProcessId === process.id || flow.targetProcessId === process.id)
+      && ['ai_input', 'retrieval_context'].includes(flow.aiRole)
+    )
+    if (isAiProcess && !hasAiInput) gaps.push({
+      id: `gap-ai-input-${process.id}`,
+      type: 'ai_without_input',
+      priority: 'medium',
+      processId: process.id,
+      title: 'AI-Prozess ohne Input-Datenfluss',
+      detail: `${process.name} nutzt KI, hat aber keinen dokumentierten Input oder Retrieval-Kontext.`
+    })
+    for (const relation of process.relations.filter((item) => item.type === 'handoff')) {
+      const covered = dataFlows.some((flow) => flow.sourceProcessId === process.id && flow.targetProcessId === relation.targetId && flow.sensitivity !== 'unclassified')
+      if (!covered) gaps.push({
+        id: `gap-handoff-${process.id}-${relation.id}`,
+        type: 'handoff_unclassified',
+        priority: 'medium',
+        processId: process.id,
+        title: 'Prozessübergabe ohne klassifizierte Daten',
+        detail: `${relation.label}: Die Übergabe ist fachlich verknüpft, aber noch nicht als Datenfluss klassifiziert.`
+      })
+    }
+  }
+  for (const flow of dataFlows) {
+    if (flow.isExternal && flow.controlStatus === 'review_required') gaps.push({
+      id: `gap-external-${flow.id}`,
+      type: 'external_uncontrolled',
+      priority: 'high',
+      processId: flow.sourceProcessId,
+      dataFlowId: flow.id,
+      title: 'Externer Datenfluss ohne bestätigte Kontrolle',
+      detail: `${flow.label}: Die Kontrolle für ${flow.targetSystem || 'das externe Ziel'} muss geprüft werden.`
+    })
+    if (flow.sensitivity === 'personal' && !flow.linkedGuardrailIds.some((id) => ['presidio', 'scrubadub'].includes(id))) gaps.push({
+      id: `gap-personal-${flow.id}`,
+      type: 'personal_unprotected',
+      priority: 'high',
+      processId: flow.sourceProcessId,
+      dataFlowId: flow.id,
+      title: 'Personenbezogene Daten ohne PII-Schutz',
+      detail: `${flow.label}: Es ist keine PII-Redaktion oder Anonymisierung verknüpft.`
+    })
+    if (!flow.owner.trim()) gaps.push({
+      id: `gap-owner-${flow.id}`,
+      type: 'owner_missing',
+      priority: 'medium',
+      processId: flow.sourceProcessId,
+      dataFlowId: flow.id,
+      title: 'Datenfluss ohne Owner',
+      detail: `${flow.label}: Die Verantwortung ist nicht zugewiesen.`
+    })
+  }
+  return gaps.sort((a, b) => (a.priority === b.priority ? 0 : a.priority === 'high' ? -1 : 1) || a.title.localeCompare(b.title, 'de'))
 }
 
 export function calculateProcessMetrics(input: Array<BusinessProcess | ProcessStep>): ProcessMapMetrics {
@@ -631,6 +991,7 @@ export function calculateProcessMetrics(input: Array<BusinessProcess | ProcessSt
 
 export function useProcessMap() {
   const processes = useState<BusinessProcess[]>('business-processes', cloneDefaults)
+  const dataFlows = useState<DataFlow[]>('data-flows', cloneDefaultDataFlows)
   const bpmnDocuments = useState<BpmnDocument[]>('bpmn-documents', () => [])
   const demoPreset = useState<DemoPreset>('process-demo-preset', () => 'compact')
   const storageLoaded = useState<boolean>('business-processes-loaded', () => false)
@@ -640,18 +1001,31 @@ export function useProcessMap() {
     try {
       const stored = localStorage.getItem(storageKey)
       if (stored) {
-        const parsed = JSON.parse(stored) as { processes?: RawBusinessProcess[]; bpmnDocuments?: BpmnDocument[]; demoPreset?: DemoPreset }
-        processes.value = normalizeProcesses(parsed.processes ?? [])
+        const parsed = JSON.parse(stored) as { processes?: RawBusinessProcess[]; dataFlows?: RawDataFlow[]; bpmnDocuments?: BpmnDocument[]; demoPreset?: DemoPreset }
+        const rawProcesses = parsed.processes ?? []
+        processes.value = normalizeProcesses(rawProcesses)
+        dataFlows.value = normalizeDataFlows(parsed.dataFlows ?? [], processes.value)
         bpmnDocuments.value = Array.isArray(parsed.bpmnDocuments) ? parsed.bpmnDocuments : []
         demoPreset.value = parsed.demoPreset ?? 'custom'
       } else {
-        const legacy = localStorage.getItem(previousStorageKey) ?? localStorage.getItem(legacyStorageKey)
+        const legacy = localStorage.getItem(previousStorageKey) ?? localStorage.getItem(olderV3StorageKey) ?? localStorage.getItem(olderStorageKey) ?? localStorage.getItem(legacyStorageKey)
         if (legacy) {
-          const migrated = normalizeProcesses(JSON.parse(legacy) as RawBusinessProcess[])
-          processes.value = migrated
-          demoPreset.value = 'custom'
+          const parsedLegacy = JSON.parse(legacy) as RawBusinessProcess[] | { processes?: RawBusinessProcess[]; dataFlows?: RawDataFlow[]; bpmnDocuments?: BpmnDocument[]; demoPreset?: DemoPreset }
+          if (Array.isArray(parsedLegacy)) {
+            processes.value = normalizeProcesses(parsedLegacy)
+            dataFlows.value = migrateLegacyDataFlows(parsedLegacy, processes.value)
+            demoPreset.value = 'custom'
+          } else {
+            const rawProcesses = parsedLegacy.processes ?? []
+            processes.value = normalizeProcesses(rawProcesses)
+            dataFlows.value = parsedLegacy.dataFlows?.length
+              ? normalizeDataFlows(parsedLegacy.dataFlows, processes.value)
+              : migrateLegacyDataFlows(rawProcesses, processes.value)
+            bpmnDocuments.value = Array.isArray(parsedLegacy.bpmnDocuments) ? parsedLegacy.bpmnDocuments : []
+            demoPreset.value = parsedLegacy.demoPreset ?? 'custom'
+          }
         }
-        localStorage.setItem(storageKey, JSON.stringify({ processes: processes.value, bpmnDocuments: [], demoPreset: demoPreset.value }))
+        localStorage.setItem(storageKey, JSON.stringify({ processes: processes.value, dataFlows: dataFlows.value, bpmnDocuments: bpmnDocuments.value, demoPreset: demoPreset.value }))
       }
     } catch {
       // Keep the curated defaults when browser data is unavailable or invalid.
@@ -659,15 +1033,16 @@ export function useProcessMap() {
     storageLoaded.value = true
   })
 
-  watch([processes, bpmnDocuments, demoPreset], () => {
+  watch([processes, dataFlows, bpmnDocuments, demoPreset], () => {
     if (!import.meta.client || !storageLoaded.value) return
-    localStorage.setItem(storageKey, JSON.stringify({ processes: processes.value, bpmnDocuments: bpmnDocuments.value, demoPreset: demoPreset.value }))
+    localStorage.setItem(storageKey, JSON.stringify({ processes: processes.value, dataFlows: dataFlows.value, bpmnDocuments: bpmnDocuments.value, demoPreset: demoPreset.value }))
   }, { deep: true })
 
   const metrics = computed(() => calculateProcessMetrics(processes.value))
   const totalSteps = computed(() => metrics.value.activities)
   const aiEnabledSteps = computed(() => metrics.value.aiActivities)
   const coverage = computed(() => metrics.value.aiShare)
+  const dataFlowGaps = computed(() => analyzeDataFlowGaps(processes.value, dataFlows.value))
   const assignedToolIds = computed(() => new Set(
     processes.value.flatMap((process) => process.steps.flatMap((step) => step.toolIds))
   ))
@@ -691,6 +1066,36 @@ export function useProcessMap() {
     else step.toolIds.push(toolId)
     synchronizeExecutionModeForModelTool(step, toolId)
     markCustom()
+  }
+
+  function addDataFlow(input: Omit<DataFlow, 'id'> & { id?: string }) {
+    const baseId = input.id || `data-flow-${Date.now()}`
+    let id = baseId
+    let suffix = 2
+    while (dataFlows.value.some((flow) => flow.id === id)) id = `${baseId}-${suffix++}`
+    const normalized = normalizeDataFlows([{ ...input, id }], processes.value)[0]
+    if (!normalized) return null
+    dataFlows.value.push(normalized)
+    markCustom()
+    return normalized
+  }
+
+  function updateDataFlow(id: string, patch: Partial<Omit<DataFlow, 'id' | 'sourceProcessId'>>) {
+    const flow = dataFlows.value.find((item) => item.id === id)
+    if (!flow) return null
+    const normalized = normalizeDataFlows([{ ...flow, ...patch }], processes.value)[0]
+    if (!normalized) return null
+    Object.assign(flow, normalized)
+    markCustom()
+    return flow
+  }
+
+  function removeDataFlow(id: string) {
+    const index = dataFlows.value.findIndex((flow) => flow.id === id)
+    if (index < 0) return false
+    dataFlows.value.splice(index, 1)
+    markCustom()
+    return true
   }
 
   function addProcess(name: string, owner: string, landscapeLayer: LandscapeLayer = 'support', domain = 'Fachbereich') {
@@ -837,6 +1242,7 @@ export function useProcessMap() {
     if (index < 0) return false
     process.steps.splice(index, 1)
     process.connections = process.connections.filter((edge) => edge.source !== stepId && edge.target !== stepId)
+    dataFlows.value.filter((flow) => flow.sourceProcessId === process.id && flow.sourceStepId === stepId).forEach((flow) => { flow.sourceStepId = undefined })
     markCustom()
     return true
   }
@@ -853,6 +1259,7 @@ export function useProcessMap() {
 
   function loadDemoPreset(preset: Exclude<DemoPreset, 'custom'>) {
     processes.value = preset === 'complex' ? cloneComplexDemo() : cloneDefaults()
+    dataFlows.value = preset === 'complex' ? complexDemoDataFlows(processes.value) : cloneDefaultDataFlows()
     bpmnDocuments.value = []
     demoPreset.value = preset
   }
@@ -875,8 +1282,30 @@ export function useProcessMap() {
       let suffix = 2
       while (processes.value.some((process) => process.id === id)) id = `${baseId}-${suffix++}`
       clone.id = id
+      const importedDataRelations = clone.relations.filter((relation) => relation.type === 'data')
+      clone.relations = clone.relations.filter((relation) => relation.type !== 'data')
       if (documentClone) clone.bpmnDocumentId = documentClone.id
       processes.value.push(clone)
+      for (const relation of importedDataRelations) {
+        addDataFlow({
+          label: relation.label || 'Importierter Datenfluss',
+          sourceProcessId: clone.id,
+          targetProcessId: relation.targetId,
+          sourceSystem: clone.name,
+          targetSystem: processes.value.find((process) => process.id === relation.targetId)?.name || '',
+          dataCategories: relation.label ? [relation.label] : [],
+          sensitivity: 'unclassified',
+          direction: 'internal',
+          aiRole: 'ai_output',
+          isExternal: false,
+          owner: clone.owner,
+          controlStatus: 'review_required',
+          controlNote: 'Beim BPMN-Import als Datenfluss erkannt; Klassifizierung prüfen.',
+          linkedPolicyIds: [],
+          linkedGuardrailIds: [],
+          monitoringStatus: 'not_connected'
+        })
+      }
       importedIds.push(id)
     }
     markCustom()
@@ -954,6 +1383,7 @@ export function useProcessMap() {
 
   return {
     processes,
+    dataFlows,
     bpmnDocuments,
     demoPreset,
     tools: aiToolCatalog,
@@ -961,10 +1391,14 @@ export function useProcessMap() {
     totalSteps,
     aiEnabledSteps,
     coverage,
+    dataFlowGaps,
     assignedToolIds,
     openHighRisks,
     findTool,
     toggleTool,
+    addDataFlow,
+    updateDataFlow,
+    removeDataFlow,
     addProcess,
     addStep,
     addWorkflowStep,

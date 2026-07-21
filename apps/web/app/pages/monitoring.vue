@@ -60,6 +60,7 @@ interface MonitoringSnapshot {
 
 const config = useRuntimeConfig()
 const api = config.public.apiBase
+const { dataFlows } = useProcessMap()
 const { data, error, status, refresh } = await useFetch<MonitoringSnapshot>(`${api}/monitoring`, {
   server: false,
   lazy: true,
@@ -102,6 +103,9 @@ const configurationGaps = computed(() => data.value?.capabilities.filter((item) 
 const endpointIssues = computed(() => data.value?.checks.filter((check) => check.status !== 'up') ?? [])
 
 const issueCount = computed(() => endpointIssues.value.length + configurationGaps.value.length)
+const expectedDataFlows = computed(() => dataFlows.value.filter((flow) => flow.monitoringStatus === 'expected').length)
+const observedDataFlows = computed(() => dataFlows.value.filter((flow) => flow.monitoringStatus === 'observed').length)
+const deviatingDataFlows = computed(() => dataFlows.value.filter((flow) => flow.monitoringStatus === 'deviation').length)
 const lastUpdated = computed(() => data.value
   ? new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(data.value.checkedAt))
   : '–')
@@ -153,6 +157,13 @@ const serviceName = (id: string) => data.value?.services.find((service) => servi
         </button>
       </div>
     </header>
+
+    <NuxtLink to="/process-map" class="data-flow-monitoring-bridge card">
+      <span><strong>{{ expectedDataFlows }}</strong><small>Erwartete Datenflüsse</small></span>
+      <span><strong>{{ observedDataFlows }}</strong><small>Runtime bestätigt</small></span>
+      <span :class="{ 'has-deviation': deviatingDataFlows }"><strong>{{ deviatingDataFlows }}</strong><small>Abweichungen</small></span>
+      <b>In AI Data Flow Map öffnen →</b>
+    </NuxtLink>
 
     <div v-if="status === 'pending' && !data" class="monitor-loading card">
       <span class="loader" />
@@ -313,6 +324,7 @@ const serviceName = (id: string) => data.value?.services.find((service) => servi
 
 <style scoped>
 .monitoring-head { align-items: center; }.monitor-actions { display: flex; align-items: center; gap: 13px; }.auto-refresh { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }.auto-refresh i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }.monitor-actions button svg { width: 14px; }.spinning { animation: spin .8s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
+.data-flow-monitoring-bridge { min-height: 72px; margin-bottom: 18px; padding: 0 18px; display: flex; align-items: center; gap: 0; border-color: var(--border-strong); border-left: 4px solid var(--purple); border-radius: 0; background: var(--surface); color: var(--text); }.data-flow-monitoring-bridge:hover { color: var(--text); transform: none; }.data-flow-monitoring-bridge > span { min-width: 130px; padding: 8px 18px; display: flex; flex-direction: column; border-left: 1px solid var(--border); }.data-flow-monitoring-bridge > span:first-child { border-left: 0; }.data-flow-monitoring-bridge strong { font-size: 18px; }.data-flow-monitoring-bridge small { margin-top: 2px; color: var(--muted); font-size: 9px; }.data-flow-monitoring-bridge .has-deviation strong { color: var(--err); }.data-flow-monitoring-bridge b { margin-left: auto; color: var(--purple); font-size: 10px; }
 .monitor-loading { min-height: 300px; display: flex; align-items: center; justify-content: center; flex-direction: column; }.loader { width: 31px; height: 31px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }.monitor-loading strong { margin-top: 15px; font-size: 13px; }.monitor-loading p { color: var(--muted); font-size: 10px; }
 .gateway-outage { padding: 25px; display: flex; align-items: center; gap: 15px; border-color: #f2caca; }.outage-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; color: var(--err); background: var(--err-soft); }.outage-icon svg { width: 21px; }.gateway-outage div { flex: 1; }.gateway-outage strong { font-size: 13px; }.gateway-outage p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
 .status-hero { min-height: 137px; margin-bottom: 18px; padding: 25px 27px; display: flex; align-items: center; justify-content: space-between; gap: 30px; border-radius: 15px; background: linear-gradient(110deg, #0d1e3b, #17345f); color: #fff; box-shadow: 0 12px 30px rgba(9,28,58,.15); }.status-hero--degraded { background: linear-gradient(110deg, #2d2130, #5e4325); }.status-hero--down { background: linear-gradient(110deg, #351b28, #6b2930); }

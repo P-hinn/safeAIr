@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
 const api = config.public.apiBase
+const { dataFlows } = useProcessMap()
 
 interface Policy { id: string; name: string; builtin: boolean; config: Record<string, any> }
 
@@ -76,6 +77,7 @@ const stepDefs = [
 ]
 
 const selectStyle = 'background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 0; padding: 0.4rem'
+const referencedFlows = (id: string) => dataFlows.value.filter((flow) => flow.linkedPolicyIds.includes(id))
 </script>
 
 <template>
@@ -101,6 +103,7 @@ const selectStyle = 'background: var(--bg); color: var(--text); border: 1px soli
               LLM: {{ p.config?.llm?.provider }}/{{ p.config?.llm?.model }} ·
               {{ p.config?.fail_closed ? 'fail-closed' : 'fail-open' }}
             </span>
+            <NuxtLink v-if="referencedFlows(p.id).length" to="/process-map" style="color: var(--purple); font-size: 0.75rem; display: block; margin-top: 0.2rem">Wirkt auf {{ referencedFlows(p.id).length }} Datenflüsse →</NuxtLink>
           </span>
           <span style="display: flex; gap: 0.5rem">
             <button style="padding: 0.35rem 0.8rem" @click="startEdit(p)">Bearbeiten</button>

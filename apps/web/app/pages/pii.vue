@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const config = useRuntimeConfig()
+const { dataFlows } = useProcessMap()
 
 interface EngineInfo {
   name: string
@@ -19,6 +20,8 @@ const engine = ref('presidio')
 const result = ref<unknown>(null)
 const loading = ref(false)
 const errorMsg = ref('')
+const personalFlows = computed(() => dataFlows.value.filter((flow) => flow.sensitivity === 'personal'))
+const protectedPersonalFlows = computed(() => personalFlows.value.filter((flow) => flow.linkedGuardrailIds.includes(engine.value)))
 
 async function anonymize() {
   loading.value = true
@@ -63,6 +66,7 @@ async function anonymize() {
         <button :disabled="loading || !text" @click="anonymize">
           {{ loading ? 'Anonymisiere …' : 'Anonymisieren' }}
         </button>
+        <NuxtLink v-if="personalFlows.length" to="/process-map" style="color: var(--purple); font-size: 0.8rem">{{ protectedPersonalFlows.length }}/{{ personalFlows.length }} personenbezogene Datenflüsse geschützt →</NuxtLink>
       </div>
 
       <p v-if="errorMsg" style="color: var(--err)">{{ errorMsg }}</p>

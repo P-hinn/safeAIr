@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateProcessMetrics, createComplexDemoProcesses, synchronizeExecutionModeForModelTool, type ProcessStep } from '../app/composables/useProcessMap'
+import { analyzeDataFlowGaps, calculateProcessMetrics, createComplexDemoProcesses, dataFlowIssues, synchronizeExecutionModeForModelTool, type BusinessProcess, type DataFlow, type ProcessStep } from '../app/composables/useProcessMap'
 
 function step(overrides: Partial<ProcessStep>): ProcessStep {
   return {
@@ -18,6 +18,46 @@ function step(overrides: Partial<ProcessStep>): ProcessStep {
     automationPotential: 'none',
     position: { x: 0, y: 0 },
     ...overrides
+  }
+}
+
+function dataFlow(overrides: Partial<DataFlow> = {}): DataFlow {
+  return {
+    id: 'flow',
+    label: 'Kundendaten an KI',
+    sourceProcessId: 'process',
+    sourceSystem: 'CRM',
+    targetSystem: 'AI API',
+    aiToolId: 'gpt-4o',
+    dataCategories: ['Kundenanfrage'],
+    sensitivity: 'internal',
+    direction: 'outbound',
+    aiRole: 'ai_input',
+    isExternal: false,
+    owner: 'AI Governance',
+    controlStatus: 'covered',
+    controlNote: 'Freigegeben',
+    linkedPolicyIds: [],
+    linkedGuardrailIds: [],
+    monitoringStatus: 'expected',
+    ...overrides
+  }
+}
+
+function process(steps: ProcessStep[], relations: BusinessProcess['relations'] = []): BusinessProcess {
+  return {
+    id: 'process',
+    name: 'Kundenservice',
+    description: '',
+    owner: 'Operations',
+    status: 'active',
+    maturity: 60,
+    volume: '',
+    landscapeLayer: 'core',
+    domain: 'Service',
+    relations,
+    steps,
+    connections: []
   }
 }
 
@@ -81,5 +121,31 @@ describe('Management-KPIs', () => {
     activity.executionMode = 'rule_automated'
     synchronizeExecutionModeForModelTool(activity, 'safair-guard')
     expect(activity.executionMode).toBe('rule_automated')
+  })
+
+  it('erkennt ein KI-Verfahren ohne dokumentierten Input-Datenfluss', () => {
+    const gaps = analyzeDataFlowGaps([process([step({ executionMode: 'ai_assisted' })])], [])
+    expect(gaps.map((gap) => gap.type)).toContain('ai_without_input')
+  })
+
+  it('priorisiert externe, personenbezogene, ownerlose und unklassifizierte Übergaben', () => {
+    const portfolio = [process(
+      [step({ executionMode: 'ai_assisted' })],
+      [{ id: 'handoff', targetId: 'target', type: 'handoff', label: 'Übergabe' }]
+    ), { ...process([]), id: 'target', name: 'Zielprozess' }]
+    const flow = dataFlow({
+      sensitivity: 'personal',
+      isExternal: true,
+      owner: '',
+      controlStatus: 'review_required'
+    })
+
+    expect(dataFlowIssues(flow)).toEqual(expect.arrayContaining(['Owner fehlt', 'Externe Kontrolle prüfen', 'PII-Schutz fehlt']))
+    expect(analyzeDataFlowGaps(portfolio, [flow]).map((gap) => gap.type)).toEqual(expect.arrayContaining([
+      'external_uncontrolled',
+      'personal_unprotected',
+      'owner_missing',
+      'handoff_unclassified'
+    ]))
   })
 })

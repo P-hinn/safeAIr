@@ -6,9 +6,9 @@ interface LandscapeProcessData {
   process: BusinessProcess
   automationRate: number
   aiShare: number
-  highRisks: number
-  incoming: number
-  outgoing: number
+  dataFlows: number
+  externalFlows: number
+  openFlows: number
   departments: string[]
   compact: boolean
 }
@@ -36,8 +36,8 @@ const layerLabel = (layer: string) => layer === 'management' ? 'Steuerung' : lay
       </header>
       <strong :title="data.process.name">{{ data.process.name }}</strong>
       <div class="compact-metrics">
-        <span class="compact-metric compact-metric--automation"><small>AUT</small><b>{{ data.automationRate }}%</b></span>
-        <span class="compact-metric compact-metric--ai"><small>KI</small><b>{{ data.aiShare }}%</b></span>
+        <span class="compact-metric compact-metric--ai"><small>Flows</small><b>{{ data.dataFlows }}</b></span>
+        <span class="compact-metric" :class="{ 'compact-metric--open': data.openFlows }"><small>Offen</small><b>{{ data.openFlows }}</b></span>
         <i>Öffnen →</i>
       </div>
     </template>
@@ -59,9 +59,9 @@ const layerLabel = (layer: string) => layer === 'management' ? 'Steuerung' : lay
       <footer>
         <span><b>{{ data.automationRate }}%</b><small>AUT</small></span>
         <span><b>{{ data.aiShare }}%</b><small>KI</small></span>
-        <span><b :class="{ risk: data.highRisks > 1 }">{{ data.highRisks }}</b><small>Risiken</small></span>
-        <span><b>{{ data.incoming }}</b><small>rein</small></span>
-        <span><b>{{ data.outgoing }}</b><small>raus</small></span>
+        <span><b>{{ data.dataFlows }}</b><small>Flows</small></span>
+        <span><b>{{ data.externalFlows }}</b><small>extern</small></span>
+        <span><b :class="{ risk: data.openFlows > 0 }">{{ data.openFlows }}</b><small>offen</small></span>
         <i>Öffnen →</i>
       </footer>
     </template>
@@ -76,6 +76,6 @@ const layerLabel = (layer: string) => layer === 'management' ? 'Steuerung' : lay
 .landscape-node > strong { margin-top: 8px; display: block; overflow: hidden; font-family: 'Space Grotesk', sans-serif; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }.node-owner { margin-top: 3px; display: block; overflow: hidden; color: #575750; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .node-departments { min-height: 23px; margin-top: 7px; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 3px; }.node-departments span { padding: 2px 5px; border: 1px solid rgba(23,23,20,.22); border-radius: 0; background: #e5e2d9; color: #494842; font-size: 7.5px; }.node-departments--empty { color: #6d6b64; font-size: 8px; }
 .landscape-node footer { margin-top: 4px; padding-top: 7px; display: flex; align-items: center; gap: 7px; border-top: 1px solid rgba(23,23,20,.2); }.landscape-node footer > span { display: flex; align-items: baseline; gap: 2px; }.landscape-node footer b { font-size: 9px; }.landscape-node footer b.risk { color: #d64242; }.landscape-node footer small { color: #66655e; font-size: 7px; }.landscape-node footer > i { margin-left: auto; color: #354dcc; font-size: 8px; font-style: normal; font-weight: 750; }
-.compact-head { align-items: center; }.compact-layer { color: #66655e; font-size: 7px; font-weight: 700; text-transform: uppercase; }.compact-metrics { margin-top: 7px; padding-top: 6px; display: flex; align-items: center; gap: 5px; border-top: 1px solid rgba(23,23,20,.16); }.compact-metric { min-width: 47px; display: flex; align-items: baseline; gap: 3px; }.compact-metric small { color: #66655e; font-size: 7px; font-weight: 800; }.compact-metric b { font-size: 9px; }.compact-metric--automation b { color: #0f7049; }.compact-metric--ai b { color: #6544c2; }.compact-metrics > i { margin-left: auto; color: #354dcc; font-size: 7.5px; font-style: normal; font-weight: 800; }
+.compact-head { align-items: center; }.compact-layer { color: #66655e; font-size: 7px; font-weight: 700; text-transform: uppercase; }.compact-metrics { margin-top: 7px; padding-top: 6px; display: flex; align-items: center; gap: 5px; border-top: 1px solid rgba(23,23,20,.16); }.compact-metric { min-width: 47px; display: flex; align-items: baseline; gap: 3px; }.compact-metric small { color: #66655e; font-size: 7px; font-weight: 800; }.compact-metric b { font-size: 9px; }.compact-metric--automation b { color: #0f7049; }.compact-metric--ai b { color: #6544c2; }.compact-metric--open b { color: #c23b54; }.compact-metrics > i { margin-left: auto; color: #354dcc; font-size: 7.5px; font-style: normal; font-weight: 800; }
 .map-handle { width: 8px; height: 8px; border: 2px solid #fff; background: #7f90a7; opacity: 0; pointer-events: none; }.map-handle--left { left: -5px; }.map-handle--right { right: -5px; }.map-handle--top { top: -5px; }.map-handle--bottom { bottom: -5px; }
 </style>

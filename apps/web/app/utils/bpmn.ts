@@ -80,24 +80,26 @@ function validLayer(value: string): LandscapeLayer {
 
 function workflowType(element: Element, toolIds: string[]): WorkflowNodeType {
   const explicit = customAttribute(element, 'workflowType')
+  const name = localName(element)
   if (['trigger', 'task', 'ai', 'decision', 'approval', 'end'].includes(explicit)) return explicit as WorkflowNodeType
-  if (element.localName === 'startEvent') return 'trigger'
-  if (element.localName === 'endEvent') return 'end'
-  if (element.localName.endsWith('Gateway')) return 'decision'
-  if (element.localName === 'userTask' || element.localName === 'manualTask') return 'approval'
-  if (['serviceTask', 'scriptTask', 'businessRuleTask'].includes(element.localName) || toolIds.length) return 'ai'
+  if (name === 'startEvent') return 'trigger'
+  if (name === 'endEvent') return 'end'
+  if (name.endsWith('Gateway')) return 'decision'
+  if (name === 'userTask' || name === 'manualTask') return 'approval'
+  if (['serviceTask', 'scriptTask', 'businessRuleTask'].includes(name) || toolIds.length) return 'ai'
   return 'task'
 }
 
 function bpmnElementType(element: Element): string {
-  return `bpmn:${element.localName.charAt(0).toUpperCase()}${element.localName.slice(1)}`
+  const name = localName(element)
+  return `bpmn:${name.charAt(0).toUpperCase()}${name.slice(1)}`
 }
 
 function executionMode(element: Element, toolIds: string[]): ExecutionMode {
   const explicit = customAttribute(element, 'executionMode')
   if (['manual', 'rule_automated', 'ai_assisted', 'ai_autonomous'].includes(explicit)) return explicit as ExecutionMode
   if (toolIds.some((id) => ['gpt-4o', 'claude', 'llama'].includes(id))) return 'ai_assisted'
-  if (['serviceTask', 'scriptTask', 'businessRuleTask'].includes(element.localName)) return 'rule_automated'
+  if (['serviceTask', 'scriptTask', 'businessRuleTask'].includes(localName(element))) return 'rule_automated'
   return 'manual'
 }
 
@@ -189,7 +191,7 @@ export function parseBpmn(xml: string): BpmnImportResult {
 
   for (const [processIndex, processElement] of elementsByLocalName(document, 'process').entries()) {
     const rawProcessId = processElement.getAttribute('id') || `imported-process-${processIndex + 1}`
-    const flowElements = directChildren(processElement).filter((element) => nodeNames.has(element.localName))
+    const flowElements = directChildren(processElement).filter((element) => nodeNames.has(localName(element)))
     const lanes = laneMap(processElement)
     if (!flowElements.length) {
       warnings.push(`${processElement.getAttribute('name') || rawProcessId}: keine unterstützten BPMN-Aktivitäten gefunden.`)

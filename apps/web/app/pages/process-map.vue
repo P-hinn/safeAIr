@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { ExecutionMode, LandscapeLayer, ProcessRelationType, ProcessStep, WorkflowNodeType, WorkflowPosition } from '~/composables/useProcessMap'
-import { calculateProcessMetrics } from '~/composables/useProcessMap'
+import type { DataFlow, DataFlowAiRole, DataFlowControlStatus, DataFlowDirection, DataSensitivity, ExecutionMode, LandscapeLayer, ProcessRelationType, ProcessStep, WorkflowNodeType, WorkflowPosition } from '~/composables/useProcessMap'
+import { calculateProcessMetrics, dataFlowIssues, isAiDataFlowStep } from '~/composables/useProcessMap'
 import { createBpmn, parseBpmn } from '~/utils/bpmn'
 import { layoutBpmnXml } from '~/utils/bpmnLayout'
 import { materializeAiDraft, type AiProcessDraft } from '~/utils/processDraft'
@@ -9,10 +9,15 @@ const route = useRoute()
 const config = useRuntimeConfig()
 const {
   processes,
+  dataFlows,
+  dataFlowGaps,
   demoPreset,
   metrics,
   tools,
   toggleTool,
+  addDataFlow,
+  updateDataFlow,
+  removeDataFlow,
   addProcess,
   addWorkflowStep,
   addConnection,
@@ -33,6 +38,7 @@ const {
 const queryProcess = typeof route.query.process === 'string' ? route.query.process : ''
 const selectedProcessId = ref(processes.value.some((process) => process.id === queryProcess) ? queryProcess : processes.value[0]?.id ?? '')
 const viewMode = ref<'landscape' | 'workflow'>(queryProcess ? 'workflow' : 'landscape')
+const governanceView = ref<'dataflows' | 'responsibility'>('dataflows')
 const selectedStepId = ref('')
 const selectedEdgeId = ref('')
 const toolFilter = ref('Alle')
@@ -64,6 +70,17 @@ const newRelationSource = ref('')
 const newRelationTarget = ref('')
 const newRelationType = ref<ProcessRelationType>('handoff')
 const newRelationLabel = ref('')
+const newFlowExternal = ref(false)
+const newFlowSourceSystem = ref('')
+const newFlowTargetSystem = ref('')
+const newFlowCategories = ref('')
+const newFlowSensitivity = ref<DataSensitivity>('unclassified')
+const newFlowDirection = ref<DataFlowDirection>('outbound')
+const newFlowAiRole = ref<DataFlowAiRole>('ai_input')
+const newFlowToolId = ref('')
+const newFlowOwner = ref('')
+const newFlowControlStatus = ref<DataFlowControlStatus>('review_required')
+const selectedProcessFlowId = ref('')
 let noticeTimer: ReturnType<typeof setTimeout> | undefined
 let processTourTimer: number | undefined
 let mediaRecorder: MediaRecorder | undefined
@@ -147,15 +164,15 @@ const processTourSteps = [
     target: '[data-process-tour="step-detail"]'
   },
   {
-    eyebrow: '12 · KI-Werkzeuge',
-    title: 'KI- und Safety-Tools gezielt zuweisen',
-    description: 'Modelle und Governance-Werkzeuge werden der konkreten Aktivität zugeordnet. PII-, Safety- und Testing-Werkzeuge verbessern die Kontrolle, verändern aber den technisch erfassten KI-Anteil nicht.',
-    target: '[data-process-tour="tool-assignment"]'
+    eyebrow: '12 · Datenfluss & Guardrails',
+    title: 'KI-Aktivität mit dem zentralen Datenfluss verknüpfen',
+    description: 'Ein Schritt verweist auf denselben Datenfluss, der auch in Karte und Portfolioanalyse erscheint. Guardrails und Policies werden am Fluss verknüpft, nicht als parallele Schrittdaten gepflegt.',
+    target: '[data-process-tour="data-flow"]'
   },
   {
     eyebrow: '13 · Governance-Nachweis',
-    title: 'Die Verantwortungsmatrix fasst den Workflow zusammen',
-    description: 'Zum Abschluss entsteht automatisch eine prüfbare Übersicht aus Prozessschritt, Verantwortlichem, Kontrolle und Freigabe. Die Prozess-Tour kann oben jederzeit erneut gestartet werden.',
+    title: 'Daten & KI-Flüsse machen Lücken handlungsfähig',
+    description: 'Inputs, Outputs und interne Weitergaben werden pro Prozess gebündelt gepflegt. Sensitivität, Owner, externe Ziele, Kontrollen und verknüpfte Guardrails ergeben direkt priorisierte Maßnahmen.',
     target: '[data-process-tour="responsibility"]'
   }
 ]
@@ -203,13 +220,92 @@ function openDesignerStep(id: string) {
 
 const selectedCoverage = computed(() => selectedMetrics.value.aiShare)
 
-const selectedToolCount = computed(() => new Set(selectedProcess.value?.steps.flatMap((step) => step.toolIds) ?? []).size)
-const selectedHighRisks = computed(() => selectedProcess.value?.steps.filter((step) => step.risk === 'high').length ?? 0)
-const selectedHumanControls = computed(() => selectedProcess.value?.steps.filter((step) => step.humanApproval).length ?? 0)
+const selectedProcessFlows = computed(() => dataFlows.value.filter((flow) =>
+  flow.sourceProcessId === selectedProcessId.value || flow.targetProcessId === selectedProcessId.value
+))
+const selectedProcessGaps = computed(() => dataFlowGaps.value.filter((gap) => gap.processId === selectedProcessId.value))
+const selectedProcessExternalFlows = computed(() => selectedProcessFlows.value.filter((flow) => flow.isExternal).length)
+const selectedProcessOpenFlows = computed(() => selectedProcessFlows.value.filter((flow) => dataFlowIssues(flow).length || flow.controlStatus !== 'covered').length)
+const selectedProcessFlow = computed(() => selectedProcessFlows.value.find((flow) => flow.id === selectedProcessFlowId.value))
+const selectedStepFlows = computed(() => selectedStep.value
+  ? selectedProcessFlows.value.filter((flow) => flow.sourceStepId === selectedStep.value?.id)
+  : [])
+const selectedProcessFlowGroups = computed(() => [
+  { id: 'input', label: 'Input', flows: selectedProcessFlows.value.filter((flow) => flow.direction !== 'internal' && (flow.direction === 'inbound' || flow.aiRole === 'ai_input' || flow.aiRole === 'retrieval_context')) },
+  { id: 'output', label: 'Output', flows: selectedProcessFlows.value.filter((flow) => flow.direction !== 'internal' && flow.direction !== 'inbound' && !['ai_input', 'retrieval_context'].includes(flow.aiRole)) },
+  { id: 'internal', label: 'Interne Weitergabe', flows: selectedProcessFlows.value.filter((flow) => flow.direction === 'internal') }
+].filter((group) => group.flows.length))
+
+const dataSensitivityLabel: Record<DataSensitivity, string> = {
+  unclassified: 'Nicht klassifiziert',
+  public: 'Öffentlich',
+  internal: 'Intern',
+  confidential: 'Vertraulich',
+  personal: 'Personenbezogen'
+}
+const dataFlowRoleLabel: Record<DataFlowAiRole, string> = {
+  ai_input: 'AI-Input',
+  retrieval_context: 'Retrieval-Kontext',
+  ai_output: 'AI-Output',
+  tool_to_tool: 'Tool-zu-Tool',
+  training_or_evaluation: 'Training / Evaluation'
+}
+const dataFlowControlLabel: Record<DataFlowControlStatus, string> = {
+  covered: 'Abgedeckt',
+  review_required: 'Prüfung erforderlich',
+  blocked: 'Blockiert'
+}
+
+function dataFlowToolLabel(flow: DataFlow) {
+  return tools.find((tool) => tool.id === flow.aiToolId)?.name || 'Kein KI-Tool zugeordnet'
+}
+
+function dataFlowProcessLabel(id?: string) {
+  return processes.value.find((process) => process.id === id)?.name || 'Externes System'
+}
+
+function targetProcesses(sourceProcessId: string) {
+  return processes.value.filter((process) => process.id !== sourceProcessId)
+}
+
+function stepFlowIssues(stepId: string) {
+  return selectedProcessFlows.value
+    .filter((flow) => flow.sourceStepId === stepId)
+    .flatMap(dataFlowIssues)
+}
+
+function updateFlowStringList(flow: DataFlow, field: 'dataCategories' | 'linkedPolicyIds' | 'linkedGuardrailIds', value: string) {
+  updateDataFlow(flow.id, { [field]: value.split(',').map((item) => item.trim()).filter(Boolean) })
+}
+
+function createFlowForStep(step: ProcessStep) {
+  if (!selectedProcess.value) return
+  const flow = addDataFlow({
+    label: `${step.title} – Datenfluss`,
+    sourceProcessId: selectedProcess.value.id,
+    sourceStepId: step.id,
+    sourceSystem: selectedProcess.value.name,
+    targetSystem: '',
+    aiToolId: step.toolIds.find((id) => tools.some((tool) => tool.id === id && tool.category === 'AI-Modell')),
+    dataCategories: [],
+    sensitivity: 'unclassified',
+    direction: 'outbound',
+    aiRole: 'ai_input',
+    isExternal: false,
+    owner: step.owner,
+    controlStatus: 'review_required',
+    controlNote: '',
+    linkedPolicyIds: [],
+    linkedGuardrailIds: [],
+    monitoringStatus: 'not_connected'
+  })
+  if (flow) selectedProcessFlowId.value = flow.id
+}
 
 watch(selectedProcess, (process) => {
   selectedStepId.value = ''
   selectedEdgeId.value = ''
+  selectedProcessFlowId.value = selectedProcessFlows.value[0]?.id ?? ''
   processPickerName.value = process?.name ?? ''
 }, { immediate: true })
 
@@ -503,11 +599,49 @@ function openRelationModal() {
   newRelationTarget.value = processes.value.find((process) => process.id !== source?.id)?.id ?? ''
   newRelationType.value = 'handoff'
   newRelationLabel.value = ''
+  newFlowExternal.value = false
+  newFlowSourceSystem.value = source?.name ?? ''
+  newFlowTargetSystem.value = ''
+  newFlowCategories.value = ''
+  newFlowSensitivity.value = 'unclassified'
+  newFlowDirection.value = 'outbound'
+  newFlowAiRole.value = 'ai_input'
+  newFlowToolId.value = ''
+  newFlowOwner.value = source?.owner ?? ''
+  newFlowControlStatus.value = 'review_required'
   relationOpen.value = true
 }
 
 function createProcessRelation() {
-  if (!newRelationSource.value || !newRelationTarget.value || newRelationSource.value === newRelationTarget.value) return
+  if (!newRelationSource.value) return
+  if (newRelationType.value === 'data') {
+    if (!newFlowExternal.value && (!newRelationTarget.value || newRelationSource.value === newRelationTarget.value)) return
+    const flow = addDataFlow({
+      label: newRelationLabel.value.trim() || 'Neuer Datenfluss',
+      sourceProcessId: newRelationSource.value,
+      targetProcessId: newFlowExternal.value ? undefined : newRelationTarget.value,
+      sourceSystem: newFlowSourceSystem.value.trim() || dataFlowProcessLabel(newRelationSource.value),
+      targetSystem: newFlowTargetSystem.value.trim() || (newFlowExternal.value ? 'Externes System' : dataFlowProcessLabel(newRelationTarget.value)),
+      aiToolId: newFlowToolId.value || undefined,
+      dataCategories: newFlowCategories.value.split(',').map((item) => item.trim()).filter(Boolean),
+      sensitivity: newFlowSensitivity.value,
+      direction: newFlowDirection.value,
+      aiRole: newFlowAiRole.value,
+      isExternal: newFlowExternal.value,
+      owner: newFlowOwner.value.trim(),
+      controlStatus: newFlowControlStatus.value,
+      controlNote: '',
+      linkedPolicyIds: [],
+      linkedGuardrailIds: [],
+      monitoringStatus: 'not_connected'
+    })
+    if (!flow) return
+    relationOpen.value = false
+    selectedProcessFlowId.value = flow.id
+    showNotice('success', 'Datenfluss gespeichert', 'Der Datenfluss ist in Karte, Prozessansicht und Gap-Analyse verfügbar.')
+    return
+  }
+  if (!newRelationTarget.value || newRelationSource.value === newRelationTarget.value) return
   const relation = addProcessRelation(
     newRelationSource.value,
     newRelationTarget.value,
@@ -517,6 +651,12 @@ function createProcessRelation() {
   if (!relation) return
   relationOpen.value = false
   showNotice('success', 'Prozesszusammenhang gespeichert', 'Die neue Übergabe ist direkt in der Prozesslandkarte sichtbar.')
+}
+
+function deleteDataFlow(id: string) {
+  if (!confirm('Diesen Datenfluss entfernen?')) return
+  removeDataFlow(id)
+  if (selectedProcessFlowId.value === id) selectedProcessFlowId.value = selectedProcessFlows.value[0]?.id ?? ''
 }
 
 function deleteProcessRelation(sourceId: string, relationId: string) {
@@ -579,12 +719,12 @@ function restoreDemo() {
   viewMode.value = 'landscape'
 }
 
-function prepareProcessTourStep(index: number) {
+async function prepareProcessTourStep(index: number) {
   createOpen.value = false
   relationOpen.value = false
   closeAiGenerator()
   const target = processTourSteps[index]?.target ?? ''
-  const workflowTarget = ['process-hero', 'workflow-builder', 'designer-tools', 'step-detail', 'tool-assignment', 'responsibility']
+  const workflowTarget = ['process-hero', 'workflow-builder', 'designer-tools', 'step-detail', 'data-flow', 'responsibility']
     .some((name) => target.includes(name))
 
   if (!workflowTarget) {
@@ -596,8 +736,18 @@ function prepareProcessTourStep(index: number) {
 
   viewMode.value = 'workflow'
   if (!selectedProcess.value) selectedProcessId.value = processes.value[0]?.id ?? ''
+  await nextTick()
 
-  if (target.includes('step-detail') || target.includes('tool-assignment') || target.includes('responsibility')) {
+  if (target.includes('data-flow')) {
+    const flowProcess = selectedProcess.value?.steps.some(isAiDataFlowStep)
+      ? selectedProcess.value
+      : processes.value.find((process) => process.steps.some(isAiDataFlowStep))
+    if (flowProcess) selectedProcessId.value = flowProcess.id
+    await nextTick()
+    selectedStepId.value = flowProcess?.steps.find(isAiDataFlowStep)?.id ?? ''
+    selectedEdgeId.value = ''
+  } else if (target.includes('step-detail') || target.includes('responsibility')) {
+    if (target.includes('responsibility')) governanceView.value = 'dataflows'
     selectedStepId.value = selectedProcess.value?.steps[0]?.id ?? ''
     selectedEdgeId.value = ''
   } else {
@@ -637,7 +787,7 @@ onBeforeUnmount(() => {
       <div>
         <p class="page-kicker">Business Process Intelligence</p>
         <h1>Prozesslandkarte</h1>
-        <p class="page-description">Das gesamte Prozessportfolio steuern, in Workflows einsteigen und KI-Tools direkt den einzelnen Prozessschritten zuweisen.</p>
+        <p class="page-description">Prozesse, KI-Einsatz und die zugehörigen Datenströme in einer gemeinsamen Governance-Sicht steuern.</p>
       </div>
       <div class="page-actions" data-process-tour="process-actions">
         <button class="button-secondary process-tour-button" @click="processTour?.start()">
@@ -698,9 +848,13 @@ onBeforeUnmount(() => {
     <ProcessLandscape
       v-if="viewMode === 'landscape'"
       :processes="processes"
+      :data-flows="dataFlows"
+      :tools="tools"
       @open-process="selectProcess"
       @create-relation="openRelationModal"
       @remove-relation="deleteProcessRelation"
+      @update-data-flow="updateDataFlow"
+      @remove-data-flow="deleteDataFlow"
     />
 
     <section v-if="viewMode === 'workflow'" class="process-switcher card">
@@ -770,8 +924,8 @@ onBeforeUnmount(() => {
           <div><strong>{{ selectedMetrics.automationRate }}%</strong><span>Automatisierung</span></div>
           <div><strong>{{ selectedMetrics.aiShare }}%</strong><span>KI-Anteil</span></div>
           <div><strong>{{ selectedMetrics.automationPotential }}%</strong><span>Potenzial</span></div>
-          <div><strong>{{ selectedToolCount }}</strong><span>Tool-Abdeckung</span></div>
-          <div><strong>{{ selectedHighRisks }}</strong><span>Hohe Risiken</span></div>
+          <div><strong>{{ selectedProcessFlows.length }}</strong><span>Datenflüsse</span></div>
+          <div><strong>{{ selectedProcessGaps.length }}</strong><span>Governance-Lücken</span></div>
           <div><strong>{{ selectedMetrics.humanOversight }}%</strong><span>Human Oversight</span></div>
         </div>
       </section>
@@ -824,6 +978,7 @@ onBeforeUnmount(() => {
                   <em>{{ executionModeMeta[step.executionMode].shortLabel }}</em>
                   <em v-if="step.executionMode === 'manual' && step.automationPotential !== 'none'" class="potential-flag" :title="step.automationPotential === 'full' ? 'Voll automatisierbar' : 'Teilweise automatisierbar'">↗</em>
                   <em v-if="step.humanApproval" class="human-flag" title="Manuelle Freigabe erforderlich">✓ Human</em>
+                  <em v-if="stepFlowIssues(step.id).length" class="data-gap-flag" :title="`Datenfluss-Lücken: ${stepFlowIssues(step.id).join(', ')}`">! Daten</em>
                 </button>
               </div>
             </div>
@@ -845,7 +1000,7 @@ onBeforeUnmount(() => {
               <span class="insight-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
               </span>
-              <div><strong>Management-Hinweis</strong><p>{{ selectedMetrics.automationRate }}% der echten BPMN-Aktivitäten laufen technisch automatisiert, davon betreffen {{ selectedMetrics.aiShare }}% KI. Das zusätzliche Automatisierungspotenzial manueller Aktivitäten liegt bei {{ selectedMetrics.automationPotential }}%.</p></div>
+              <div><strong>Governance-Hinweis</strong><p>{{ selectedProcessFlows.length }} Datenflüsse sind für diesen Prozess dokumentiert, davon {{ selectedProcessExternalFlows }} extern und {{ selectedProcessOpenFlows }} mit offenem Prüfbedarf. <template v-if="selectedProcessGaps.length">Die Gap-Analyse priorisiert {{ selectedProcessGaps.length }} konkrete Maßnahme(n).</template><template v-else>Aktuell sind keine strukturellen Datenfluss-Lücken offen.</template></p></div>
             </div>
           </article>
 
@@ -898,6 +1053,28 @@ onBeforeUnmount(() => {
               <i />
             </label>
             <label class="field field--full"><span>Kontrollmaßnahme</span><textarea v-model="selectedStep.control" rows="2" /></label>
+          </div>
+
+          <div v-if="isAiDataFlowStep(selectedStep)" class="data-flow-editor" data-process-tour="data-flow">
+            <div class="data-flow-editor__head">
+              <div>
+                <p class="section-kicker">Governance am Datenstrom</p>
+                <h3>Verknüpfte Datenflüsse</h3>
+              </div>
+              <span class="flow-status" :class="stepFlowIssues(selectedStep.id).length ? 'flow-status--gap' : 'flow-status--complete'">
+                {{ selectedStepFlows.length ? `${selectedStepFlows.length} Fluss/Flüsse` : 'Nicht dokumentiert' }}
+              </span>
+            </div>
+            <div v-if="selectedStepFlows.length" class="step-flow-list">
+              <button v-for="flow in selectedStepFlows" :key="flow.id" type="button" @click="selectedProcessFlowId = flow.id; governanceView = 'dataflows'">
+                <span><strong>{{ flow.label }}</strong><small>{{ flow.sourceSystem }} → {{ flow.targetSystem || dataFlowProcessLabel(flow.targetProcessId) }}</small></span>
+                <i :class="`is-${flow.controlStatus}`">{{ dataSensitivityLabel[flow.sensitivity] }} · {{ dataFlowControlLabel[flow.controlStatus] }}</i>
+              </button>
+            </div>
+            <div v-else class="step-flow-empty">Die KI-Aktivität ist sichtbar, aber ihr Input bzw. Output ist noch nicht als zentraler Datenfluss dokumentiert.</div>
+            <button type="button" class="button-secondary add-step-flow" @click="createFlowForStep(selectedStep)">+ Datenfluss verknüpfen</button>
+            <p class="guardrail-scope">Hier wird nur verknüpft. Quelle, Ziel, Sensitivität, Policies und Guardrails werden unten im gemeinsamen Register gepflegt und bleiben dadurch in allen Sichten konsistent.</p>
+            <div v-if="stepFlowIssues(selectedStep.id).length" class="data-flow-gaps"><strong>Offen</strong><span v-for="gap in stepFlowIssues(selectedStep.id)" :key="gap">{{ gap }}</span></div>
           </div>
 
           <div class="tool-assignment" data-process-tour="tool-assignment">
@@ -956,10 +1133,57 @@ onBeforeUnmount(() => {
       </section>
 
       <article class="card responsibility-card" data-process-tour="responsibility">
-        <div class="map-head">
-          <div><p class="section-kicker">Governance</p><h2>Verantwortungsmatrix</h2></div>
+        <div class="map-head governance-head">
+          <div><p class="section-kicker">Governance-Nachweis</p><h2>{{ governanceView === 'dataflows' ? 'Daten & KI-Flüsse' : 'Verantwortungsmatrix' }}</h2></div>
+          <div class="governance-tabs" role="tablist" aria-label="Governance-Sicht wählen">
+            <button :class="{ active: governanceView === 'dataflows' }" @click="governanceView = 'dataflows'">Daten & KI-Flüsse <span>{{ selectedProcessFlows.length }}</span></button>
+            <button :class="{ active: governanceView === 'responsibility' }" @click="governanceView = 'responsibility'">Verantwortung</button>
+          </div>
         </div>
-        <div class="responsibility-table">
+        <div v-if="governanceView === 'dataflows'" class="data-flow-register">
+          <div v-if="!selectedProcessFlows.length" class="data-flow-empty">
+            <strong>Noch keine Daten- oder KI-Flüsse</strong>
+            <span>Lege einen schlanken, zentralen Datenfluss an. Er erscheint anschließend automatisch in der Prozesskarte und Portfolioanalyse.</span>
+            <button class="button-secondary" @click="openRelationModal(); newRelationType = 'data'">Datenfluss anlegen</button>
+          </div>
+          <template v-else>
+            <section v-for="group in selectedProcessFlowGroups" :key="group.id" class="flow-register-group">
+              <div class="flow-register-group__head"><strong>{{ group.label }}</strong><span>{{ group.flows.length }}</span></div>
+              <button v-for="flow in group.flows" :key="flow.id" type="button" class="data-flow-row" :class="{ active: selectedProcessFlowId === flow.id }" @click="selectedProcessFlowId = flow.id">
+                <span class="flow-activity"><strong>{{ flow.label }}</strong><small>{{ flow.owner || 'Owner fehlt' }}</small></span>
+                <span class="flow-path"><span>{{ flow.sourceSystem || dataFlowProcessLabel(flow.sourceProcessId) }}</span><i>→ {{ dataFlowToolLabel(flow) }} →</i><span>{{ flow.targetSystem || dataFlowProcessLabel(flow.targetProcessId) }}</span></span>
+                <span class="flow-metadata"><strong>{{ dataSensitivityLabel[flow.sensitivity] }}</strong><small>{{ flow.isExternal ? 'Extern' : 'Intern' }} · {{ dataFlowRoleLabel[flow.aiRole] }}</small></span>
+                <span class="flow-guardrail">{{ flow.linkedGuardrailIds.join(', ') || 'Nicht verknüpft' }}</span>
+                <span><i class="flow-register-status" :class="dataFlowIssues(flow).length || flow.controlStatus !== 'covered' ? 'is-gap' : 'is-complete'">{{ dataFlowControlLabel[flow.controlStatus] }}</i></span>
+              </button>
+            </section>
+            <div v-if="selectedProcessFlow" class="flow-maintenance">
+              <div class="flow-maintenance__head">
+                <div><p class="section-kicker">Zentraler Datensatz</p><h3>{{ selectedProcessFlow.label }}</h3></div>
+                <button class="delete-icon" title="Datenfluss löschen" @click="deleteDataFlow(selectedProcessFlow.id)">×</button>
+              </div>
+              <div class="form-grid">
+                <label class="field field--full"><span>Bezeichnung</span><input :value="selectedProcessFlow.label" @change="updateDataFlow(selectedProcessFlow.id, { label: ($event.target as HTMLInputElement).value })" /></label>
+                <label class="field"><span>Quellsystem</span><input :value="selectedProcessFlow.sourceSystem" @change="updateDataFlow(selectedProcessFlow.id, { sourceSystem: ($event.target as HTMLInputElement).value })" /></label>
+                <label class="field"><span>Zielprozess (optional)</span><select :value="selectedProcessFlow.targetProcessId || ''" @change="updateDataFlow(selectedProcessFlow.id, { targetProcessId: ($event.target as HTMLSelectElement).value || undefined })"><option value="">Kein Zielprozess</option><option v-for="process in targetProcesses(selectedProcessFlow.sourceProcessId)" :key="process.id" :value="process.id">{{ process.name }}</option></select></label>
+                <label class="field"><span>Zielsystem</span><input :value="selectedProcessFlow.targetSystem" @change="updateDataFlow(selectedProcessFlow.id, { targetSystem: ($event.target as HTMLInputElement).value })" /></label>
+                <label class="field"><span>KI-Tool</span><select :value="selectedProcessFlow.aiToolId || ''" @change="updateDataFlow(selectedProcessFlow.id, { aiToolId: ($event.target as HTMLSelectElement).value || undefined })"><option value="">Nicht zugeordnet</option><option v-for="tool in tools.filter((item) => item.category === 'AI-Modell')" :key="tool.id" :value="tool.id">{{ tool.name }}</option></select></label>
+                <label class="field"><span>Datenkategorien</span><input :value="selectedProcessFlow.dataCategories.join(', ')" placeholder="z. B. Anfrage, Kundendaten" @change="updateFlowStringList(selectedProcessFlow, 'dataCategories', ($event.target as HTMLInputElement).value)" /></label>
+                <label class="field"><span>Sensitivität</span><select :value="selectedProcessFlow.sensitivity" @change="updateDataFlow(selectedProcessFlow.id, { sensitivity: ($event.target as HTMLSelectElement).value as DataSensitivity })"><option v-for="(label, value) in dataSensitivityLabel" :key="value" :value="value">{{ label }}</option></select></label>
+                <label class="field"><span>AI-Rolle</span><select :value="selectedProcessFlow.aiRole" @change="updateDataFlow(selectedProcessFlow.id, { aiRole: ($event.target as HTMLSelectElement).value as DataFlowAiRole })"><option v-for="(label, value) in dataFlowRoleLabel" :key="value" :value="value">{{ label }}</option></select></label>
+                <label class="field"><span>Richtung</span><select :value="selectedProcessFlow.direction" @change="updateDataFlow(selectedProcessFlow.id, { direction: ($event.target as HTMLSelectElement).value as DataFlowDirection })"><option value="inbound">Eingehend</option><option value="outbound">Ausgehend</option><option value="internal">Intern</option></select></label>
+                <label class="field"><span>Owner</span><input :value="selectedProcessFlow.owner" @change="updateDataFlow(selectedProcessFlow.id, { owner: ($event.target as HTMLInputElement).value })" /></label>
+                <label class="field"><span>Kontrollstatus</span><select :value="selectedProcessFlow.controlStatus" @change="updateDataFlow(selectedProcessFlow.id, { controlStatus: ($event.target as HTMLSelectElement).value as DataFlowControlStatus })"><option v-for="(label, value) in dataFlowControlLabel" :key="value" :value="value">{{ label }}</option></select></label>
+                <label class="toggle-field"><span><strong>Externer Datenfluss</strong><small>Über Organisationsgrenze</small></span><input type="checkbox" :checked="selectedProcessFlow.isExternal" @change="updateDataFlow(selectedProcessFlow.id, { isExternal: ($event.target as HTMLInputElement).checked })" /><i /></label>
+                <label class="field"><span>Policies</span><input :value="selectedProcessFlow.linkedPolicyIds.join(', ')" placeholder="IDs, kommagetrennt" @change="updateFlowStringList(selectedProcessFlow, 'linkedPolicyIds', ($event.target as HTMLInputElement).value)" /></label>
+                <label class="field"><span>Guardrails</span><input :value="selectedProcessFlow.linkedGuardrailIds.join(', ')" placeholder="z. B. presidio" @change="updateFlowStringList(selectedProcessFlow, 'linkedGuardrailIds', ($event.target as HTMLInputElement).value)" /></label>
+                <label class="field field--full"><span>Kontrollnotiz</span><textarea :value="selectedProcessFlow.controlNote" rows="2" @change="updateDataFlow(selectedProcessFlow.id, { controlNote: ($event.target as HTMLTextAreaElement).value })" /></label>
+              </div>
+              <div v-if="dataFlowIssues(selectedProcessFlow).length" class="data-flow-gaps"><strong>Offen</strong><span v-for="issue in dataFlowIssues(selectedProcessFlow)" :key="issue">{{ issue }}</span></div>
+            </div>
+          </template>
+        </div>
+        <div v-else class="responsibility-table">
           <div class="responsibility-row responsibility-row--head"><span>Prozessschritt</span><span>Verantwortlich</span><span>Kontrolle</span><span>Freigabe</span></div>
           <div v-for="step in selectedProcess.steps" :key="step.id" class="responsibility-row" @click="selectStep(step.id)">
             <strong>{{ step.title }}</strong>
@@ -1052,8 +1276,8 @@ onBeforeUnmount(() => {
         <div class="modal-icon modal-icon--relation">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h4a4 4 0 0 0 4-4V6M11 12a4 4 0 0 1 4 4v2"/></svg>
         </div>
-        <h2>Prozesszusammenhang anlegen</h2>
-        <p>Dokumentiere eine Übergabe, Steuerungsbeziehung, Unterstützung oder einen Datenfluss zwischen zwei Geschäftsprozessen.</p>
+        <h2>{{ newRelationType === 'data' ? 'Datenfluss anlegen' : 'Prozesszusammenhang anlegen' }}</h2>
+        <p>{{ newRelationType === 'data' ? 'Dokumentiere Quelle, Ziel, Datentyp und Kontrolle als einen zentralen Datenfluss.' : 'Dokumentiere eine Übergabe, Steuerungsbeziehung oder Unterstützung zwischen zwei Geschäftsprozessen.' }}</p>
         <div class="relation-form-route">
           <label class="field"><span>Quellprozess</span>
             <select v-model="newRelationSource">
@@ -1061,8 +1285,8 @@ onBeforeUnmount(() => {
             </select>
           </label>
           <span>→</span>
-          <label class="field"><span>Zielprozess</span>
-            <select v-model="newRelationTarget">
+          <label class="field"><span>{{ newRelationType === 'data' && newFlowExternal ? 'Zielprozess (nicht erforderlich)' : 'Zielprozess' }}</span>
+            <select v-model="newRelationTarget" :disabled="newRelationType === 'data' && newFlowExternal">
               <option v-for="process in processes.filter((item) => item.id !== newRelationSource)" :key="process.id" :value="process.id">{{ process.domain }} · {{ process.name }}</option>
             </select>
           </label>
@@ -1076,7 +1300,27 @@ onBeforeUnmount(() => {
           </select>
         </label>
         <label class="field"><span>Was wird übergeben oder bereitgestellt?</span><input v-model="newRelationLabel" placeholder="z. B. Freigegebene Kundendaten" /></label>
-        <div class="modal-actions"><button type="button" class="button-secondary" @click="relationOpen = false">Abbrechen</button><button :disabled="!newRelationSource || !newRelationTarget || newRelationSource === newRelationTarget" type="submit">Zusammenhang speichern</button></div>
+        <div v-if="newRelationType === 'data'" class="new-flow-fields">
+          <label class="toggle-field"><span><strong>Externer Datenfluss</strong><small>Ziel liegt außerhalb der Organisation</small></span><input v-model="newFlowExternal" type="checkbox" /><i /></label>
+          <div class="modal-field-row">
+            <label class="field"><span>Quellsystem</span><input v-model="newFlowSourceSystem" placeholder="z. B. CRM" /></label>
+            <label class="field"><span>Zielsystem</span><input v-model="newFlowTargetSystem" placeholder="z. B. OpenAI API" /></label>
+          </div>
+          <label class="field"><span>Datenkategorien</span><input v-model="newFlowCategories" placeholder="z. B. Anfrage, Kundendaten" /></label>
+          <div class="modal-field-row">
+            <label class="field"><span>Sensitivität</span><select v-model="newFlowSensitivity"><option v-for="(label, value) in dataSensitivityLabel" :key="value" :value="value">{{ label }}</option></select></label>
+            <label class="field"><span>Richtung</span><select v-model="newFlowDirection"><option value="inbound">Eingehend</option><option value="outbound">Ausgehend</option><option value="internal">Intern</option></select></label>
+          </div>
+          <div class="modal-field-row">
+            <label class="field"><span>AI-Rolle</span><select v-model="newFlowAiRole"><option v-for="(label, value) in dataFlowRoleLabel" :key="value" :value="value">{{ label }}</option></select></label>
+            <label class="field"><span>KI-Tool</span><select v-model="newFlowToolId"><option value="">Nicht zugeordnet</option><option v-for="tool in tools.filter((item) => item.category === 'AI-Modell')" :key="tool.id" :value="tool.id">{{ tool.name }}</option></select></label>
+          </div>
+          <div class="modal-field-row">
+            <label class="field"><span>Owner</span><input v-model="newFlowOwner" /></label>
+            <label class="field"><span>Kontrollstatus</span><select v-model="newFlowControlStatus"><option v-for="(label, value) in dataFlowControlLabel" :key="value" :value="value">{{ label }}</option></select></label>
+          </div>
+        </div>
+        <div class="modal-actions"><button type="button" class="button-secondary" @click="relationOpen = false">Abbrechen</button><button :disabled="!newRelationSource || ((newRelationType !== 'data' || !newFlowExternal) && (!newRelationTarget || newRelationSource === newRelationTarget))" type="submit">{{ newRelationType === 'data' ? 'Datenfluss speichern' : 'Zusammenhang speichern' }}</button></div>
       </form>
     </div>
 
@@ -1097,7 +1341,7 @@ onBeforeUnmount(() => {
       :steps="processTourSteps"
       :storage-key="PROCESS_TOUR_STORAGE_KEY"
       :auto-start="false"
-      :version="5"
+      :version="6"
       :step-delay="320"
       @step-change="prepareProcessTourStep"
     />
@@ -1162,12 +1406,23 @@ onBeforeUnmount(() => {
 .mode-legend { min-height: 29px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 0; border-left: 1px solid var(--border); background: transparent; white-space: nowrap; }.mode-legend:first-child { border-left: 0; }.mode-legend i { width: 8px; height: 8px; background: #55544e; }.mode-legend b { min-width: 15px; color: var(--text); text-align: right; }.mode-legend--automation i { background: #0f7049; }.mode-legend--ai-assisted i { background: #6544c2; }.mode-legend--ai-autonomous i { background: #354dcc; }.mode-short { display: none; }
 .node-dot { width: 7px; height: 7px; display: inline-block; margin-right: 4px; border-radius: 2px; }.node-dot--ai { background: var(--purple); }.node-dot--automation { margin-left: 7px; background: var(--ok); }.node-dot--decision { background: var(--warn); transform: rotate(45deg); }.node-dot--approval { background: var(--accent); }
 .designer-step-strip { min-height: 86px; padding: 10px 12px; display: flex; align-items: stretch; gap: 12px; border-bottom: 1px solid var(--border-strong); background: #dcd9d0; }.step-strip-intro { width: 138px; flex: 0 0 auto; display: flex; justify-content: center; flex-direction: column; }.step-strip-intro strong { font-size: 11px; }.step-strip-intro span { margin-top: 3px; color: #55544e; font-size: 8.5px; line-height: 1.35; }.step-strip-list { min-width: 0; padding: 1px 2px 5px; display: flex; align-items: stretch; gap: 7px; overflow-x: auto; }.step-strip-list button { width: 192px; min-height: 62px; padding: 8px 8px 7px; position: relative; flex: 0 0 auto; display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid #8f8d86; border-radius: 0; background: #fffef9; color: var(--text); text-align: left; box-shadow: 2px 2px 0 rgb(23 23 20 / 7%); }.step-strip-list button:hover { border-color: var(--ink); background: #fffef9; color: var(--text); transform: translateY(-1px); }.step-strip-list button.active { border-color: var(--ink); box-shadow: 0 0 0 2px var(--acid); }.step-strip-list button > i { width: 4px; height: 100%; background: #55544e; }.step-strip-list button > span { min-width: 0; display: flex; flex-direction: column; }.step-strip-list small { color: #66655e; font-size: 7px; text-transform: uppercase; }.step-strip-list strong { margin-top: 4px; overflow: hidden; font-size: 9.5px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }.step-strip-list em { padding: 3px 4px; align-self: start; background: #55544e; color: #fff; font-size: 6.5px; font-style: normal; font-weight: 800; white-space: nowrap; }.step-strip-list .step-strip-item--rule-automated > i, .step-strip-list .step-strip-item--rule-automated > em { background: #0f7049; }.step-strip-list .step-strip-item--ai-assisted > i, .step-strip-list .step-strip-item--ai-assisted > em { background: #6544c2; }.step-strip-list .step-strip-item--ai-autonomous > i, .step-strip-list .step-strip-item--ai-autonomous > em { background: #354dcc; }.step-strip-list .potential-flag { min-width: 17px; padding-inline: 3px; position: absolute; right: 5px; bottom: 5px; background: var(--acid); color: var(--ink); text-align: center; }.step-strip-list button.has-human .potential-flag { right: 54px; }.step-strip-list .human-flag, .step-strip-list .step-strip-item--ai-assisted > .human-flag, .step-strip-list .step-strip-item--ai-autonomous > .human-flag, .step-strip-list .step-strip-item--rule-automated > .human-flag { padding-inline: 5px; position: absolute; right: 5px; bottom: 5px; background: #354dcc; color: #fff; }
+.step-strip-list .data-gap-flag, .step-strip-list .step-strip-item--ai-assisted > .data-gap-flag, .step-strip-list .step-strip-item--ai-autonomous > .data-gap-flag { position: absolute; top: 5px; right: 49px; background: var(--err); color: #fff; }
 .canvas-loading { height: 590px; display: grid; place-items: center; background: var(--surface-soft); color: var(--muted); font-size: 11px; }
 .map-insight { margin: 0 20px 20px; padding: 12px 14px; display: flex; gap: 11px; border: 1px solid #dce7fb; border-radius: 9px; background: #f5f8ff; }
 .insight-icon { width: 27px; height: 27px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 7px; background: #e4edff; color: var(--accent); }.insight-icon svg { width: 15px; }
 .map-insight strong { font-size: 9.5px; }.map-insight p { margin: 3px 0 0; color: var(--muted); font-size: 8.5px; line-height: 1.45; }
 
 .responsibility-card { margin-top: 20px; padding: 0; overflow: hidden; }
+.governance-head { gap: 18px; }
+.governance-tabs { padding: 3px; display: flex; border: 1px solid var(--border-strong); background: var(--surface); }.governance-tabs button { min-height: 32px; padding: 0 10px; border: 0; background: transparent; color: var(--muted); font-size: 9px; }.governance-tabs button:hover { background: var(--surface-soft); color: var(--text); transform: none; }.governance-tabs button.active { background: var(--ink); color: var(--paper); }.governance-tabs span { margin-left: 4px; color: inherit; font-weight: 800; }
+.data-flow-register { overflow-x: auto; }
+.flow-register-group { min-width: 900px; }.flow-register-group__head { min-height: 36px; padding: 8px 20px; display: flex; align-items: center; gap: 7px; border-top: 1px solid var(--border-strong); background: #dcd9d0; }.flow-register-group__head strong { font-size: 9px; letter-spacing: .5px; text-transform: uppercase; }.flow-register-group__head span { min-width: 21px; padding: 2px 5px; background: var(--ink); color: var(--paper); font-size: 8px; text-align: center; }
+.data-flow-row { width: 100%; min-width: 900px; min-height: 70px; padding: 10px 20px; display: grid; grid-template-columns: 1fr 2.2fr 1.05fr .8fr 112px; align-items: center; gap: 15px; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--surface); color: var(--muted); font-size: 9px; text-align: left; cursor: pointer; }.data-flow-row:hover, .data-flow-row.active { border-color: var(--border); background: var(--surface-soft); color: var(--muted); transform: none; }.data-flow-row.active { box-shadow: inset 4px 0 0 var(--purple); }
+.flow-activity, .flow-metadata { min-width: 0; display: flex; flex-direction: column; }.flow-activity strong, .flow-metadata strong { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.flow-activity small, .flow-metadata small { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.flow-path { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; }.flow-path > span { overflow: hidden; padding: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-overflow: ellipsis; white-space: nowrap; }.flow-path i { color: var(--purple); font-size: 8px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.flow-guardrail { font-weight: 700; color: var(--text); }.flow-register-status { padding: 5px 7px; display: inline-flex; font-size: 8px; font-style: normal; font-weight: 800; white-space: nowrap; }.flow-register-status.is-complete { background: var(--ok-soft); color: var(--ok); }.flow-register-status.is-gap { background: var(--err-soft); color: var(--err); }
+.data-flow-empty { min-height: 150px; padding: 28px; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; }.data-flow-empty strong { font-size: 13px; }.data-flow-empty span { max-width: 470px; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.5; }.data-flow-empty button { margin-top: 12px; }
+.flow-maintenance { min-width: 900px; padding: 18px 20px 22px; border-top: 3px solid var(--purple); background: #f4f1ff; }.flow-maintenance__head { display: flex; align-items: flex-start; justify-content: space-between; }.flow-maintenance__head h3 { margin: 3px 0 0; font-size: 14px; }.flow-maintenance .form-grid { padding: 15px 0 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }.flow-maintenance .field--full { grid-column: 1 / -1; }
 .responsibility-table { overflow-x: auto; }
 .responsibility-row { min-width: 660px; min-height: 50px; padding: 9px 20px; display: grid; grid-template-columns: 1.1fr .9fr 1.7fr 55px; align-items: center; gap: 14px; border-top: 1px solid var(--border); color: var(--muted); font-size: 9px; cursor: pointer; }
 .responsibility-row:hover { background: var(--surface-soft); }.responsibility-row--head { min-height: 34px; border-top: 0; background: #fafbfc; color: var(--muted-light); font-size: 7.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; cursor: default; }
@@ -1183,6 +1438,10 @@ onBeforeUnmount(() => {
 .field { min-width: 0; display: flex; flex-direction: column; gap: 5px; }.field--full { grid-column: 1 / -1; }.field > span { color: var(--muted); font-size: 8.5px; font-weight: 700; }.field input, .field select, .field textarea { width: 100%; min-height: 34px; padding: 8px 9px; font-size: 9.5px; }.field textarea { resize: vertical; }
 .execution-field { padding-left: 8px; border-left: 4px solid #55544e; }.execution-field--rule-automated { border-left-color: #0f7049; }.execution-field--rule-automated select { background-color: #e4f5ec; }.execution-field--ai-assisted { border-left-color: #6544c2; }.execution-field--ai-assisted select { background-color: #eee9ff; }.execution-field--ai-autonomous { border-left-color: #354dcc; }.execution-field--ai-autonomous select { background-color: #e6edff; }
 .toggle-field { min-height: 48px; position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }.toggle-field > span { display: flex; flex-direction: column; }.toggle-field strong { font-size: 8.5px; }.toggle-field small { margin-top: 2px; color: var(--muted); font-size: 7.5px; }.active-info-tag { margin-left: 4px; padding: 2px 5px; display: inline-block; background: #354dcc; color: #fff; font-size: 7px; font-style: normal; text-transform: uppercase; }.toggle-field input { position: absolute; opacity: 0; }.toggle-field i { width: 31px; height: 17px; position: relative; flex: 0 0 auto; border-radius: 9px; background: #d7dde6; transition: 150ms; }.toggle-field i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 11px; height: 11px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.18); transition: 150ms; }.toggle-field input:checked + i { background: var(--accent); }.toggle-field input:checked + i::after { transform: translateX(14px); }
+.data-flow-editor { margin-top: 10px; padding: 16px 18px 18px; border-top: 3px solid var(--purple); border-bottom: 1px solid var(--border); background: #f4f1ff; }.data-flow-editor__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }.data-flow-editor__head h3 { margin: 3px 0 0; font-size: 12px; }.flow-status { padding: 5px 7px; font-size: 8px; font-weight: 800; white-space: nowrap; }.flow-status--complete { background: var(--ok-soft); color: var(--ok); }.flow-status--gap { background: var(--err-soft); color: var(--err); }
+.step-flow-list { margin-top: 12px; display: grid; gap: 5px; }.step-flow-list button { width: 100%; min-height: 48px; padding: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-color: #c9c1e8; background: var(--surface); color: var(--text); text-align: left; }.step-flow-list button:hover { border-color: var(--purple); background: #fff; color: var(--text); transform: none; }.step-flow-list button > span { min-width: 0; display: flex; flex-direction: column; }.step-flow-list strong, .step-flow-list small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.step-flow-list strong { font-size: 9px; }.step-flow-list small { margin-top: 3px; color: var(--muted); font-size: 7.5px; }.step-flow-list i { padding: 4px 5px; background: var(--ok-soft); color: var(--ok); font-size: 7px; font-style: normal; font-weight: 800; white-space: nowrap; }.step-flow-list i.is-review_required { background: var(--warn-soft); color: var(--warn); }.step-flow-list i.is-blocked { background: var(--err-soft); color: var(--err); }.step-flow-empty { margin-top: 12px; padding: 10px; border: 1px dashed #b7add8; color: var(--muted); font-size: 8px; line-height: 1.5; }.add-step-flow { width: 100%; margin-top: 8px; }
+.data-flow-route { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(75px, .75fr) auto minmax(0, 1fr); align-items: stretch; gap: 4px; }.data-flow-route > span { min-width: 0; padding: 8px; display: flex; justify-content: center; flex-direction: column; border: 1px solid #c9c1e8; background: var(--surface); }.data-flow-route > i { display: grid; place-items: center; color: var(--purple); font-style: normal; }.data-flow-route small { color: var(--muted); font-size: 7px; font-weight: 800; text-transform: uppercase; }.data-flow-route strong { margin-top: 4px; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }.data-flow-route__tool { border-color: var(--purple) !important; background: var(--purple) !important; color: #fff; }.data-flow-route__tool small { color: #ddd5ff; }
+.data-flow-form { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.guardrail-scope { margin: 11px 0 0; color: var(--muted); font-size: 8px; line-height: 1.5; }.data-flow-gaps { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }.data-flow-gaps strong, .data-flow-gaps span { padding: 4px 6px; font-size: 8px; }.data-flow-gaps strong { background: var(--err); color: #fff; }.data-flow-gaps span { background: var(--err-soft); color: var(--err); }
 .tool-assignment { margin-top: 10px; padding: 15px 18px 18px; border-top: 1px solid var(--border); }.assignment-head > div { display: flex; align-items: center; justify-content: space-between; }.assignment-head h3 { margin: 0; font-size: 11px; }.assignment-head span { color: var(--muted); font-size: 8px; }
 .category-filter { margin: 11px -2px 9px; padding-bottom: 3px; display: flex; gap: 4px; overflow-x: auto; }.category-filter button { min-height: 25px; padding: 0 7px; flex: 0 0 auto; border-color: transparent; background: transparent; color: var(--muted); font-size: 7.5px; }.category-filter button:hover { background: var(--surface-soft); color: var(--text); transform: none; }.category-filter button.active { border-color: #cfddf6; background: var(--accent-soft); color: var(--accent); }
 .tool-list { max-height: 286px; display: grid; gap: 5px; overflow-y: auto; }.tool-option { min-height: 47px; padding: 7px 8px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: 140ms; }.tool-option:hover { border-color: #becde2; }.tool-option--selected { border-color: #a9c5fb; background: #f6f9ff; }.tool-option > input { position: absolute; opacity: 0; }.tool-logo { width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 7px; color: #fff; font-size: 7px; font-weight: 800; }.tool-info { min-width: 0; flex: 1; }.tool-info strong { display: block; font-size: 9px; }.tool-info small { margin-top: 2px; display: block; overflow: hidden; color: var(--muted); font-size: 7.5px; text-overflow: ellipsis; white-space: nowrap; }.tool-status { padding: 3px 5px; border-radius: 999px; font-size: 6.5px; font-weight: 700; }.tool-status--active { color: var(--ok); background: var(--ok-soft); }.tool-status--pilot { color: var(--warn); background: var(--warn-soft); }.tool-status--planned { color: var(--muted); background: #f0f2f5; }.custom-check { width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid #cdd5e0; border-radius: 5px; color: transparent; font-size: 9px; }.tool-option--selected .custom-check { border-color: var(--accent); background: var(--accent); color: #fff; }
@@ -1196,7 +1455,7 @@ onBeforeUnmount(() => {
 
 .modal-backdrop { position: fixed; z-index: 100; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(7,18,39,.58); backdrop-filter: blur(4px); }.create-modal { width: min(440px, 100%); padding: 28px; border-radius: 16px; background: #fff; box-shadow: 0 24px 60px rgba(0,0,0,.22); }.modal-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: var(--accent-soft); color: var(--accent); }.modal-icon svg { width: 22px; }.create-modal h2 { margin: 16px 0 7px; font-size: 19px; }.create-modal > p { margin: 0 0 20px; color: var(--muted); font-size: 11px; line-height: 1.55; }.create-modal > .field { margin-top: 12px; }.create-modal > .field input { min-height: 40px; font-size: 11px; }.modal-actions { margin-top: 22px; display: flex; justify-content: flex-end; gap: 9px; }
 .modal-field-row { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.modal-field-row input, .modal-field-row select { min-height: 40px; font-size: 9.5px; }
-.modal-icon--relation { color: var(--purple); background: var(--purple-soft); }.relation-modal { width: min(560px, 100%); }.relation-form-route { margin: 16px 0 12px; display: grid; grid-template-columns: 1fr 25px 1fr; align-items: end; gap: 7px; }.relation-form-route > span { padding-bottom: 11px; color: var(--purple); font-size: 15px; text-align: center; }.relation-form-route select, .relation-type-field select, .relation-modal > .field input { min-height: 40px; font-size: 9px; }.relation-type-field { margin-bottom: 12px; }
+.modal-icon--relation { color: var(--purple); background: var(--purple-soft); }.relation-modal { width: min(640px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; }.relation-form-route { margin: 16px 0 12px; display: grid; grid-template-columns: 1fr 25px 1fr; align-items: end; gap: 7px; }.relation-form-route > span { padding-bottom: 11px; color: var(--purple); font-size: 15px; text-align: center; }.relation-form-route select, .relation-type-field select, .relation-modal > .field input { min-height: 40px; font-size: 9px; }.relation-type-field { margin-bottom: 12px; }.new-flow-fields { margin-top: 14px; padding: 14px; border: 1px solid #c9c1e8; background: #f4f1ff; }.new-flow-fields > .field { margin-top: 12px; }.new-flow-fields .toggle-field { padding: 0 4px; }
 .ai-create-button { background: var(--acid); color: var(--ink); }.ai-create-button:hover { background: var(--ink); color: var(--paper); }
 .ai-modal-backdrop { padding: 24px; overflow-y: auto; }.ai-process-modal { width: min(1180px, 100%); max-height: calc(100vh - 48px); padding: 0; overflow-y: auto; }.ai-modal-head { padding: 22px 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border-strong); background: var(--surface-soft); }.ai-modal-head h2 { margin: 4px 0 7px; }.ai-modal-head span { color: var(--muted); font-size: 11px; }.ai-modal-grid { display: grid; grid-template-columns: minmax(0, 620px); justify-content: center; }.ai-modal-grid.has-preview { grid-template-columns: minmax(320px, .8fr) minmax(520px, 1.4fr); }.ai-prompt-column { padding: 22px 24px; display: grid; gap: 15px; }.ai-prompt-column textarea { min-height: 90px; font-size: 12px; line-height: 1.5; }.speech-controls { min-height: 42px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }.speech-controls button { min-height: 36px; font-size: 9px; }.recording-state { display: inline-flex; align-items: center; gap: 7px; color: var(--err); font-size: 11px; font-weight: 700; }.recording-state i { width: 9px; height: 9px; border-radius: 50%; background: var(--err); animation: recording-pulse 1.2s infinite; }.transcribing-state { color: var(--purple); font-size: 11px; font-weight: 700; }.ai-generate { width: 100%; min-height: 45px; }.ai-error { margin: 0; padding: 11px 12px; border: 1px solid var(--err); background: var(--err-soft); color: var(--err); font-size: 11px; line-height: 1.5; }.ai-preview-column { min-width: 0; padding: 22px 24px; border-left: 1px solid var(--border-strong); background: var(--surface-muted); }.ai-preview-head { margin-bottom: 11px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }.ai-preview-head > div { display: flex; flex-direction: column; }.ai-preview-head span { color: var(--muted); font-size: 10px; }.ai-preview-head strong { margin-top: 3px; font-size: 16px; }.ai-bpmn-preview { height: 350px; overflow: hidden; border: 1px solid var(--ink); background: #fff; }.ai-bpmn-preview :deep(.bpmn-designer) { min-height: 350px; }.draft-notes { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }.draft-notes > div { padding: 10px 12px; border: 1px solid var(--border); background: var(--surface); }.draft-notes strong { font-size: 11px; }.draft-notes ul { margin: 7px 0 0; padding-left: 17px; color: var(--muted); font-size: 10px; line-height: 1.5; }.draft-warnings { border-color: var(--warn) !important; background: var(--warn-soft) !important; }.ai-preview-actions { position: sticky; bottom: 0; padding-top: 14px; background: var(--surface-muted); }
 @keyframes recording-pulse { 50% { opacity: .35; transform: scale(.8); } }
@@ -1221,7 +1480,9 @@ onBeforeUnmount(() => {
   .page-actions { width: 100%; flex-direction: column; }.page-actions button { width: 100%; }
   .view-tabs { width: 100%; }.view-tabs button { flex: 1; }.reset-link { width: 100%; margin-left: 0; }.process-viewbar { align-items: stretch; flex-direction: column; }.view-context { order: initial; }
   .process-heading { align-items: flex-start; }.process-symbol { display: none; }.process-name-line { align-items: flex-start; flex-direction: column; }.process-classification { align-items: stretch; flex-direction: column; }.process-classification label { min-width: 0; }.process-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }.process-metrics > div { padding: 0; border-left: 0; }
-  .map-legend { display: none; }.form-grid { grid-template-columns: 1fr; }.field--full { grid-column: auto; }.tool-list { grid-template-columns: 1fr; }
+  .map-legend { display: none; }.form-grid, .data-flow-form { grid-template-columns: 1fr; }.field--full { grid-column: auto; }.tool-list { grid-template-columns: 1fr; }
+  .governance-head { align-items: flex-start; flex-direction: column; }.governance-tabs { width: 100%; }.governance-tabs button { flex: 1; }
+  .data-flow-route { grid-template-columns: 1fr; }.data-flow-route > i { transform: rotate(90deg); }
   .create-modal { padding: 22px; }.modal-field-row, .relation-form-route { grid-template-columns: 1fr; }.relation-form-route > span { padding: 0; transform: rotate(90deg); }.transfer-notice { right: 12px; bottom: 12px; }
 }
 .process-viewbar { border-color: var(--border-strong); }
@@ -1267,11 +1528,14 @@ onBeforeUnmount(() => {
 .responsibility-row { min-height: 60px; color: #55544e; font-size: 11px; }
 .responsibility-row--head { min-height: 40px; background: #dcd9d0; color: #45443f; font-size: 9.5px; }
 .responsibility-row strong { font-size: 12px; }
+.governance-tabs button { min-height: 37px; font-size: 11px; }
+.data-flow-row { min-height: 78px; font-size: 11px; }.data-flow-row--head { min-height: 42px; font-size: 9.5px; }.flow-activity strong, .flow-metadata strong { font-size: 12px; }.flow-activity small, .flow-metadata small, .flow-path i, .flow-register-status { font-size: 9.5px; }
 .autosave { font-size: 10.5px; }
 .field > span { color: #55544e; font-size: 11px; }
 .field input, .field select, .field textarea { min-height: 40px; font-size: 12px; }
 .toggle-field strong { font-size: 11.5px; }
 .toggle-field small { font-size: 10px; }
+.data-flow-editor__head h3 { font-size: 14px; }.flow-status { font-size: 10px; }.data-flow-route small { font-size: 8.5px; }.data-flow-route strong { font-size: 10px; }.guardrail-scope { font-size: 10px; }.data-flow-gaps strong, .data-flow-gaps span { font-size: 9.5px; }
 .assignment-head h3 { font-size: 14px; }
 .assignment-head span { font-size: 10.5px; }
 .tool-option { min-height: 58px; padding: 9px; background: var(--surface-raised); }
