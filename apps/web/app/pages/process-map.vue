@@ -106,14 +106,14 @@ const processTourSteps = [
   },
   {
     eyebrow: '05 · Management-Kennzahlen',
-    title: 'Das Portfolio wird automatisch aggregiert',
-    description: 'Automatisierungsgrad, KI-Anteil und Potenzial zählen nur echte BPMN-Aktivitäten. Events und Gateways verzerren den Nenner nicht; Safety- und PII-Tools werden nicht als KI-Einsatz gezählt.',
+    title: 'Kennzahlen nur dann öffnen, wenn du sie brauchst',
+    description: 'Die kompakte Kennzahlenzeile fasst Prozesse, Automatisierung und KI zusammen und lässt sich aufklappen. Die Berechnung zählt nur echte BPMN-Aktivitäten; Events und Gateways verzerren den Nenner nicht.',
     target: '[data-process-tour="portfolio-kpis"]'
   },
   {
     eyebrow: '06 · Unternehmenskarte',
-    title: 'Große Portfolios bleiben navigierbar',
-    description: 'Ebenenfilter, Suche und der Umschalter zwischen Übersicht und Details halten auch große Bestände lesbar. Übergabepfeile sind direkt sichtbar und lassen sich bei Bedarf ausblenden; ein Klick öffnet den nativen Workflow.',
+    title: 'Semantischer Zoom hält große Portfolios lesbar',
+    description: 'Beim Herauszoomen verschwinden Prozesskarten automatisch: Bereiche und ihre Verbindungen bleiben als Orientierung sichtbar. Beim Hineinzoomen erscheinen die Prozesse wieder; Filter und Suche grenzen das Portfolio zusätzlich ein.',
     target: '[data-process-tour="landscape-map"]'
   },
   {
@@ -136,8 +136,8 @@ const processTourSteps = [
   },
   {
     eyebrow: '10 · Besen und Vollbild',
-    title: 'Geometrie bewusst ordnen und zurücknehmen',
-    description: 'Der Prozess-Besen ordnet Flüsse links nach rechts und routet Kanten orthogonal. Im Vollbild bleiben nur Designer, Ablaufübersicht und der Inspector des gewählten Schritts – die Verantwortungsmatrix wird ausgeblendet.',
+    title: 'Zwei klare Werkzeug-Icons für die Arbeitsfläche',
+    description: 'Besen und Vollbild sind als kompakte Icons mit Tooltip verfügbar. Der Besen ordnet Flüsse links nach rechts; im Vollbild bleiben nur Designer, Ablaufübersicht und der Inspector des gewählten Schritts.',
     target: '[data-process-tour="designer-tools"]'
   },
   {
@@ -614,7 +614,7 @@ onMounted(() => {
       const generalState = JSON.parse(localStorage.getItem('safair:onboarding-tour') || 'null') as { version?: number; status?: string } | null
       const generalTourSeen = generalState?.version === 2 && (generalState.status === 'completed' || generalState.status === 'skipped')
       const processState = JSON.parse(localStorage.getItem(PROCESS_TOUR_STORAGE_KEY) || 'null') as { version?: number; status?: string } | null
-      const processTourSeen = processState?.version === 4 && (processState.status === 'completed' || processState.status === 'skipped')
+      const processTourSeen = processState?.version === 5 && (processState.status === 'completed' || processState.status === 'skipped')
       if (generalTourSeen && !processTourSeen && !document.querySelector('.tour')) processTour.value?.start()
     } catch {
       // The contextual tour remains available through its button when storage is blocked.
@@ -791,8 +791,15 @@ onBeforeUnmount(() => {
                   <span class="mode-legend mode-legend--ai-assisted"><i /><span class="mode-long">KI-assistiert</span><span class="mode-short">KI+</span><b>{{ designerExecutionCounts.ai_assisted }}</b></span>
                   <span class="mode-legend mode-legend--ai-autonomous"><i /><span class="mode-long">KI-autonom</span><span class="mode-short">KI AUTO</span><b>{{ designerExecutionCounts.ai_autonomous }}</b></span>
                 </span>
-                <button class="button-secondary" title="BPMN automatisch anordnen" @click="tidyProcess">🧹 Aufräumen</button>
-                <button class="button-secondary" @click="toggleDesignerFullscreen">{{ designerFullscreen ? 'Vollbild beenden' : 'Vollbild' }}</button>
+                <div class="designer-tool-buttons" aria-label="Designer-Werkzeuge">
+                  <button class="button-secondary designer-icon-button" aria-label="BPMN aufräumen" title="BPMN automatisch anordnen" @click="tidyProcess">
+                    <span class="broom-icon" aria-hidden="true">🧹</span>
+                  </button>
+                  <button class="button-secondary designer-icon-button" :aria-label="designerFullscreen ? 'Vollbild beenden' : 'Designer im Vollbild öffnen'" :title="designerFullscreen ? 'Vollbild beenden (Esc)' : 'Designer im Vollbild öffnen'" @click="toggleDesignerFullscreen">
+                    <svg v-if="!designerFullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1090,7 +1097,7 @@ onBeforeUnmount(() => {
       :steps="processTourSteps"
       :storage-key="PROCESS_TOUR_STORAGE_KEY"
       :auto-start="false"
-      :version="4"
+      :version="5"
       :step-delay="320"
       @step-change="prepareProcessTourStep"
     />
@@ -1149,9 +1156,10 @@ onBeforeUnmount(() => {
 .map-head { min-height: 67px; padding: 17px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
 .section-kicker { margin: 0; color: var(--muted-light); font-size: 8.5px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; }
 .map-head h2 { margin: 3px 0 0; font-size: 15px; }
-.designer-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }.designer-actions button { min-height: 34px; padding: 0 10px; font-size: 10px; }
-.map-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--muted); font-size: 8.5px; font-weight: 600; }
-.mode-legend { min-height: 25px; padding: 0 7px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: var(--surface); white-space: nowrap; }.mode-legend i { width: 8px; height: 8px; background: #55544e; }.mode-legend b { min-width: 15px; color: var(--text); text-align: right; }.mode-legend--automation i { background: #0f7049; }.mode-legend--ai-assisted i { background: #6544c2; }.mode-legend--ai-autonomous i { background: #354dcc; }.mode-short { display: none; }
+.designer-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }.designer-actions button { min-height: 34px; padding: 0 10px; font-size: 10px; }
+.designer-tool-buttons { padding-left: 10px; display: flex; align-items: center; gap: 5px; border-left: 1px solid var(--border-strong); }.designer-actions .designer-icon-button { width: 40px; min-width: 40px; min-height: 40px; padding: 0; }.designer-icon-button svg { width: 17px; }.designer-icon-button .broom-icon { font-size: 16px; line-height: 1; }
+.map-legend { padding: 3px; display: flex; align-items: center; flex-wrap: wrap; gap: 0; border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); font-size: 8.5px; font-weight: 600; }
+.mode-legend { min-height: 29px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 0; border-left: 1px solid var(--border); background: transparent; white-space: nowrap; }.mode-legend:first-child { border-left: 0; }.mode-legend i { width: 8px; height: 8px; background: #55544e; }.mode-legend b { min-width: 15px; color: var(--text); text-align: right; }.mode-legend--automation i { background: #0f7049; }.mode-legend--ai-assisted i { background: #6544c2; }.mode-legend--ai-autonomous i { background: #354dcc; }.mode-short { display: none; }
 .node-dot { width: 7px; height: 7px; display: inline-block; margin-right: 4px; border-radius: 2px; }.node-dot--ai { background: var(--purple); }.node-dot--automation { margin-left: 7px; background: var(--ok); }.node-dot--decision { background: var(--warn); transform: rotate(45deg); }.node-dot--approval { background: var(--accent); }
 .designer-step-strip { min-height: 86px; padding: 10px 12px; display: flex; align-items: stretch; gap: 12px; border-bottom: 1px solid var(--border-strong); background: #dcd9d0; }.step-strip-intro { width: 138px; flex: 0 0 auto; display: flex; justify-content: center; flex-direction: column; }.step-strip-intro strong { font-size: 11px; }.step-strip-intro span { margin-top: 3px; color: #55544e; font-size: 8.5px; line-height: 1.35; }.step-strip-list { min-width: 0; padding: 1px 2px 5px; display: flex; align-items: stretch; gap: 7px; overflow-x: auto; }.step-strip-list button { width: 192px; min-height: 62px; padding: 8px 8px 7px; position: relative; flex: 0 0 auto; display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 1px solid #8f8d86; border-radius: 0; background: #fffef9; color: var(--text); text-align: left; box-shadow: 2px 2px 0 rgb(23 23 20 / 7%); }.step-strip-list button:hover { border-color: var(--ink); background: #fffef9; color: var(--text); transform: translateY(-1px); }.step-strip-list button.active { border-color: var(--ink); box-shadow: 0 0 0 2px var(--acid); }.step-strip-list button > i { width: 4px; height: 100%; background: #55544e; }.step-strip-list button > span { min-width: 0; display: flex; flex-direction: column; }.step-strip-list small { color: #66655e; font-size: 7px; text-transform: uppercase; }.step-strip-list strong { margin-top: 4px; overflow: hidden; font-size: 9.5px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }.step-strip-list em { padding: 3px 4px; align-self: start; background: #55544e; color: #fff; font-size: 6.5px; font-style: normal; font-weight: 800; white-space: nowrap; }.step-strip-list .step-strip-item--rule-automated > i, .step-strip-list .step-strip-item--rule-automated > em { background: #0f7049; }.step-strip-list .step-strip-item--ai-assisted > i, .step-strip-list .step-strip-item--ai-assisted > em { background: #6544c2; }.step-strip-list .step-strip-item--ai-autonomous > i, .step-strip-list .step-strip-item--ai-autonomous > em { background: #354dcc; }.step-strip-list .potential-flag { min-width: 17px; padding-inline: 3px; position: absolute; right: 5px; bottom: 5px; background: var(--acid); color: var(--ink); text-align: center; }.step-strip-list button.has-human .potential-flag { right: 54px; }.step-strip-list .human-flag, .step-strip-list .step-strip-item--ai-assisted > .human-flag, .step-strip-list .step-strip-item--ai-autonomous > .human-flag, .step-strip-list .step-strip-item--rule-automated > .human-flag { padding-inline: 5px; position: absolute; right: 5px; bottom: 5px; background: #354dcc; color: #fff; }
 .canvas-loading { height: 590px; display: grid; place-items: center; background: var(--surface-soft); color: var(--muted); font-size: 11px; }

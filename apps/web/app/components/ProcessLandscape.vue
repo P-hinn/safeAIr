@@ -30,10 +30,15 @@ const layoutRevision = ref(0)
 const selectedRelationId = ref('')
 const hoveredRelationId = ref('')
 const showRelationLabels = ref(false)
+const showPortfolioKpis = ref(false)
+const viewportZoom = ref(1)
 const mapCard = ref<HTMLElement>()
 const flowStore = shallowRef<VueFlowStore>()
 const isFullscreen = ref(false)
 let previousBodyOverflow = ''
+
+const KPI_VISIBILITY_STORAGE_KEY = 'safair:process-map-kpis'
+const DOMAIN_ZOOM_THRESHOLD = 0.58
 
 watch(() => props.processes.length, (count) => {
   densityMode.value = count > 12 ? 'overview' : 'detail'
@@ -87,6 +92,8 @@ const visibleRelations = computed(() => {
 
 const selectedRelation = computed(() => allRelations.value.find((item) => item.id === selectedRelationId.value))
 const portfolioMetrics = computed(() => calculateProcessMetrics(props.processes))
+const isDomainZoom = computed(() => visibleProcesses.value.length > 6 && viewportZoom.value < DOMAIN_ZOOM_THRESHOLD)
+const semanticLabelScale = computed(() => Math.min(2.4, Math.max(1, 1 / Math.max(viewportZoom.value, .25))).toFixed(2))
 const layerCounts = computed(() => Object.fromEntries(layerMeta.map((layer) => [layer.id, props.processes.filter((process) => process.landscapeLayer === layer.id).length])) as Record<LandscapeLayer, number>)
 
 function participatingDepartments(process: BusinessProcess) {
@@ -131,14 +138,16 @@ const layout = computed<LayoutResult>(() => {
   const compact = densityMode.value === 'overview'
   const processWidth = compact ? 206 : 248
   const processHeight = compact ? 82 : 134
-  const processGap = compact ? 10 : 18
-  const groupGap = compact ? 14 : 28
+  const processGap = compact ? 18 : 24
+  const groupGap = compact ? 26 : 36
+  const groupInset = compact ? 18 : 20
+  const groupHeader = compact ? 48 : 52
   const columnsPerGroup = 3
   const groupWidth = (processCount: number) => {
     const columns = Math.min(columnsPerGroup, Math.max(1, processCount))
-    return 32 + columns * processWidth + Math.max(0, columns - 1) * processGap
+    return groupInset * 2 + columns * processWidth + Math.max(0, columns - 1) * processGap
   }
-  const groupHeight = (processCount: number) => 52 + Math.ceil(Math.max(1, processCount) / columnsPerGroup) * processHeight + Math.max(0, Math.ceil(processCount / columnsPerGroup) - 1) * processGap
+  const groupHeight = (processCount: number) => groupHeader + groupInset + Math.ceil(Math.max(1, processCount) / columnsPerGroup) * processHeight + Math.max(0, Math.ceil(processCount / columnsPerGroup) - 1) * processGap
   const groupsByLayer = new Map(layerMeta.map((layer) => {
     const layerProcesses = visibleProcesses.value.filter((process) => process.landscapeLayer === layer.id)
     const groups = [...new Set(layerProcesses.map((process) => process.domain))].sort((a, b) => a.localeCompare(b, 'de')).map((department) => ({
@@ -147,8 +156,8 @@ const layout = computed<LayoutResult>(() => {
     }))
     return [layer.id, groups] as const
   }))
-  const bandWidth = compact ? 1420 : 1180
-  const bandGap = 18
+  const bandWidth = compact ? 1480 : 1280
+  const bandGap = 28
   const nodes: Node[] = []
   const processPositions = new Map<string, { x: number; y: number }>()
   let bandY = 12
@@ -167,27 +176,38 @@ const layout = computed<LayoutResult>(() => {
         groupY += rowHeight + groupGap
         rowHeight = 0
       }
+      const departmentData = {
+        name: group.department,
+        count: group.processes.length,
+        color: departmentColor(group.department),
+        initials: initials(group.department)
+      }
       nodes.push({
         id: `department-${layer.id}-${group.department}`,
         type: 'department',
         position: { x: groupX, y: groupY },
-        data: {
-          name: group.department,
-          count: group.processes.length,
-          color: departmentColor(group.department),
-          initials: initials(group.department)
-        },
+        data: departmentData,
         selectable: false,
         draggable: false,
         connectable: false,
         zIndex: -1,
         style: { width: `${width}px`, height: `${height}px` }
       })
+      nodes.push({
+        id: `department-label-${layer.id}-${group.department}`,
+        type: 'departmentLabel',
+        position: { x: groupX + width / 2, y: groupY + height / 2 },
+        data: departmentData,
+        selectable: false,
+        draggable: false,
+        connectable: false,
+        zIndex: 6
+      })
 
       group.processes.forEach((process, processIndex) => {
         const column = processIndex % columnsPerGroup
         const row = Math.floor(processIndex / columnsPerGroup)
-        const position = { x: groupX + 16 + column * (processWidth + processGap), y: groupY + 38 + row * (processHeight + processGap) }
+        const position = { x: groupX + groupInset + column * (processWidth + processGap), y: groupY + groupHeader + row * (processHeight + processGap) }
         const processKpis = processMetrics(process)
         processPositions.set(process.id, position)
         nodes.push({
@@ -299,6 +319,15 @@ function handleFlowInit(store: VueFlowStore) {
   window.setTimeout(refitMap, 320)
 }
 
+function handleViewportChange(viewport: { zoom: number }) {
+  viewportZoom.value = viewport.zoom
+}
+
+function togglePortfolioKpis() {
+  showPortfolioKpis.value = !showPortfolioKpis.value
+  if (import.meta.client) localStorage.setItem(KPI_VISIBILITY_STORAGE_KEY, String(showPortfolioKpis.value))
+}
+
 function refitMap() {
   if (!import.meta.client) return
   window.setTimeout(() => {
@@ -363,6 +392,7 @@ function removeSelectedRelation() {
 }
 
 function minimapColor(node: Node) {
+  if (node.type === 'departmentLabel') return 'transparent'
   if (node.type === 'landscapeProcess') {
     const process = (node.data as { process: BusinessProcess }).process
     return process.landscapeLayer === 'management' ? '#7557d3' : process.landscapeLayer === 'core' ? '#246bfd' : '#168a5b'
@@ -371,6 +401,7 @@ function minimapColor(node: Node) {
 }
 
 onMounted(() => {
+  showPortfolioKpis.value = localStorage.getItem(KPI_VISIBILITY_STORAGE_KEY) === 'true'
   document.addEventListener('fullscreenchange', syncFullscreenState)
   window.addEventListener('keydown', handleEscape)
 })
@@ -384,12 +415,23 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="landscape-view">
-    <section class="map-kpis" data-process-tour="portfolio-kpis">
-      <article><span class="kpi-icon kpi-icon--blue">A</span><div><span>Abteilungen</span><strong>{{ departments.length }}</strong><small>als Bereiche auf der Landkarte</small></div></article>
-      <article><span class="kpi-icon kpi-icon--green">P</span><div><span>Prozesse</span><strong>{{ processes.length }}</strong><small>{{ visibleProcesses.length }} aktuell sichtbar</small></div></article>
-      <article><span class="kpi-icon kpi-icon--purple">↗</span><div><span>Verbindungen</span><strong>{{ allRelations.length }}</strong><small>mit Richtung und Übergabeobjekt</small></div></article>
-      <article><span class="kpi-icon kpi-icon--green">AUT</span><div><span>Automatisierungsgrad</span><strong>{{ portfolioMetrics.automationRate }}%</strong><small>regelbasiert und KI-basiert</small></div></article>
-      <article><span class="kpi-icon kpi-icon--amber">KI</span><div><span>KI-Anteil</span><strong>{{ portfolioMetrics.aiShare }}%</strong><small>nur KI-assistiert oder autonom</small></div></article>
+    <section class="kpi-disclosure" data-process-tour="portfolio-kpis">
+      <button class="kpi-disclosure-toggle" :aria-expanded="showPortfolioKpis" aria-controls="portfolio-kpis" @click="togglePortfolioKpis">
+        <span class="kpi-disclosure-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/></svg>
+        </span>
+        <span><strong>Portfolio-Kennzahlen</strong><small>{{ processes.length }} Prozesse · {{ portfolioMetrics.automationRate }}% automatisiert · {{ portfolioMetrics.aiShare }}% KI</small></span>
+        <svg class="kpi-disclosure-chevron" :class="{ open: showPortfolioKpis }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 10 5 5 5-5"/></svg>
+      </button>
+      <Transition name="kpi-panel">
+        <div v-if="showPortfolioKpis" id="portfolio-kpis" class="map-kpis">
+          <article><span class="kpi-icon kpi-icon--blue">A</span><div><span>Abteilungen</span><strong>{{ departments.length }}</strong><small>als Bereiche auf der Landkarte</small></div></article>
+          <article><span class="kpi-icon kpi-icon--green">P</span><div><span>Prozesse</span><strong>{{ processes.length }}</strong><small>{{ visibleProcesses.length }} aktuell sichtbar</small></div></article>
+          <article><span class="kpi-icon kpi-icon--purple">↗</span><div><span>Verbindungen</span><strong>{{ allRelations.length }}</strong><small>mit Richtung und Übergabeobjekt</small></div></article>
+          <article><span class="kpi-icon kpi-icon--green">AUT</span><div><span>Automatisierungsgrad</span><strong>{{ portfolioMetrics.automationRate }}%</strong><small>regelbasiert und KI-basiert</small></div></article>
+          <article><span class="kpi-icon kpi-icon--amber">KI</span><div><span>KI-Anteil</span><strong>{{ portfolioMetrics.aiShare }}%</strong><small>nur KI-assistiert oder autonom</small></div></article>
+        </div>
+      </Transition>
     </section>
 
     <article ref="mapCard" class="card visual-map-card" data-process-tour="landscape-map" :class="{ 'visual-map-card--fullscreen': isFullscreen }">
@@ -400,45 +442,56 @@ onBeforeUnmount(() => {
           <span>Die Flächen sind Abteilungen. Pfeile zeigen, welcher Prozess was an welchen Folgeprozess übergibt.</span>
         </div>
         <div class="map-actions">
-          <label class="map-search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-            <input v-model="search" placeholder="Prozess oder Abteilung …" />
-          </label>
-          <select v-model="departmentFilter" aria-label="Abteilung filtern">
-            <option value="all">Alle Abteilungen</option>
-            <option v-for="department in departments" :key="department" :value="department">{{ department }}</option>
-          </select>
-          <select v-model="statusFilter" aria-label="Status filtern">
-            <option value="all">Alle Status</option>
-            <option value="active">Produktiv</option>
-            <option value="pilot">Pilot</option>
-            <option value="planned">Geplant</option>
-          </select>
-          <select v-model="layerFilter" aria-label="Prozessebene filtern">
-            <option value="all">Alle Ebenen · {{ processes.length }}</option>
-            <option value="management">Steuerung · {{ layerCounts.management }}</option>
-            <option value="core">Kernprozesse · {{ layerCounts.core }}</option>
-            <option value="support">Unterstützung · {{ layerCounts.support }}</option>
-          </select>
-          <div class="density-switch" aria-label="Darstellungsdichte">
-            <button :class="{ active: densityMode === 'overview' }" title="Reduzierte Karten für große Portfolios" @click="setDensity('overview')">Übersicht</button>
-            <button :class="{ active: densityMode === 'detail' }" title="Alle Prozessdetails direkt auf den Karten" @click="setDensity('detail')">Details</button>
+          <div class="map-filter-tools">
+            <label class="map-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+              <input v-model="search" placeholder="Prozess oder Abteilung …" />
+            </label>
+            <select v-model="departmentFilter" aria-label="Abteilung filtern">
+              <option value="all">Alle Abteilungen</option>
+              <option v-for="department in departments" :key="department" :value="department">{{ department }}</option>
+            </select>
+            <select v-model="statusFilter" aria-label="Status filtern">
+              <option value="all">Alle Status</option>
+              <option value="active">Produktiv</option>
+              <option value="pilot">Pilot</option>
+              <option value="planned">Geplant</option>
+            </select>
+            <select v-model="layerFilter" aria-label="Prozessebene filtern">
+              <option value="all">Alle Ebenen · {{ processes.length }}</option>
+              <option value="management">Steuerung · {{ layerCounts.management }}</option>
+              <option value="core">Kernprozesse · {{ layerCounts.core }}</option>
+              <option value="support">Unterstützung · {{ layerCounts.support }}</option>
+            </select>
           </div>
-          <button class="button-secondary" :aria-pressed="showConnections" @click="showConnections = !showConnections">{{ showConnections ? 'Pfeile aus' : 'Pfeile an' }}</button>
-          <button class="button-secondary" title="Landkarte deterministisch anordnen" @click="tidyMap">🧹 Aufräumen</button>
-          <button class="button-secondary fullscreen-button" :aria-label="isFullscreen ? 'Vollbild beenden' : 'Landkarte im Vollbild öffnen'" :title="isFullscreen ? 'Vollbild beenden (Esc)' : 'Landkarte im Vollbild öffnen'" @click="toggleFullscreen">
-            <svg v-if="!isFullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>
-            {{ isFullscreen ? 'Beenden' : 'Vollbild' }}
-          </button>
-          <button @click="emit('createRelation')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            Verbindung
-          </button>
+          <div class="map-command-tools">
+            <div class="density-switch" aria-label="Darstellungsdichte">
+              <button :class="{ active: densityMode === 'overview' }" title="Reduzierte Karten für große Portfolios" @click="setDensity('overview')">Kompakt</button>
+              <button :class="{ active: densityMode === 'detail' }" title="Alle Prozessdetails direkt auf den Karten" @click="setDensity('detail')">Detail</button>
+            </div>
+            <button class="button-secondary" :aria-pressed="showConnections" @click="showConnections = !showConnections">{{ showConnections ? 'Pfeile aus' : 'Pfeile an' }}</button>
+            <div class="map-icon-tools" aria-label="Kartenwerkzeuge">
+              <button class="button-secondary icon-tool-button" aria-label="Landkarte aufräumen" title="Landkarte automatisch anordnen" @click="tidyMap">
+                <span class="broom-icon" aria-hidden="true">🧹</span>
+              </button>
+              <button class="button-secondary icon-tool-button fullscreen-button" :aria-label="isFullscreen ? 'Vollbild beenden' : 'Landkarte im Vollbild öffnen'" :title="isFullscreen ? 'Vollbild beenden (Esc)' : 'Landkarte im Vollbild öffnen'" @click="toggleFullscreen">
+                <svg v-if="!isFullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h5V3M21 8h-5V3M3 16h5v5M21 16h-5v5"/></svg>
+              </button>
+            </div>
+            <button @click="emit('createRelation')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Verbindung
+            </button>
+          </div>
         </div>
       </header>
 
       <div class="relation-legend" data-process-tour="relations">
+        <span class="zoom-state" :class="{ 'zoom-state--domains': isDomainZoom }">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M3 12h3m12 0h3M12 3v3m0 12v3"/></svg>
+          {{ isDomainZoom ? 'Bereichsansicht' : 'Prozessansicht' }}
+        </span>
         <span v-if="densityMode === 'overview'" class="overview-note"><b>Übersichtsmodus</b> · {{ visibleProcesses.length }} Prozesse · Details per Klick</span>
         <button :class="{ active: relationFilter === 'all' }" @click="relationFilter = 'all'">Alle Verbindungen <b>{{ allRelations.length }}</b></button>
         <button v-for="type in relationTypes" :key="type.id" :class="{ active: relationFilter === type.id }" :style="{ '--relation-color': type.color }" @click="relationFilter = type.id">
@@ -451,7 +504,7 @@ onBeforeUnmount(() => {
         <span>Pfeil wählen für Details · freie Fläche ziehen · scrollen zum Zoomen</span>
       </div>
 
-      <div class="map-shell" :class="{ 'map-shell--detail': selectedRelation, 'map-shell--overview': densityMode === 'overview' && visibleProcesses.length > 12 }">
+      <div class="map-shell" :class="{ 'map-shell--detail': selectedRelation, 'map-shell--overview': densityMode === 'overview' && visibleProcesses.length > 12, 'map-shell--domains': isDomainZoom }" :style="{ '--semantic-label-scale': semanticLabelScale }">
         <ClientOnly>
           <VueFlow
             :key="mapKey"
@@ -466,6 +519,7 @@ onBeforeUnmount(() => {
             :elevate-edges-on-select="true"
             class="landscape-flow"
             @init="handleFlowInit"
+            @viewport-change="handleViewportChange"
             @node-click="handleNodeClick"
             @edge-click="handleEdgeClick"
             @edge-mouse-enter="handleEdgeMouseEnter"
@@ -474,6 +528,7 @@ onBeforeUnmount(() => {
           >
             <template #node-landscapeLayer="nodeProps"><LandscapeLayerNode v-bind="nodeProps" /></template>
             <template #node-department="nodeProps"><DepartmentMapNode v-bind="nodeProps" /></template>
+            <template #node-departmentLabel="nodeProps"><DepartmentMapLabelNode v-bind="nodeProps" /></template>
             <template #node-landscapeProcess="nodeProps"><LandscapeProcessNode v-bind="nodeProps" /></template>
             <Background pattern-color="#dfe5ed" :gap="18" :size="1" />
             <MiniMap :node-color="minimapColor" :pannable="true" :zoomable="true" position="bottom-right" />
@@ -514,11 +569,11 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-.landscape-view { min-width: 0; display: grid; gap: 20px; container-type: inline-size; }.map-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-top: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }.map-kpis article { min-height: 96px; padding: 15px 16px; display: flex; align-items: center; gap: 12px; border: 0; border-left: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }.map-kpis article:first-child { border-left: 0; }.map-kpis article > div { min-width: 0; display: flex; flex-direction: column; }.map-kpis article > div > span { color: var(--muted); font-size: 8px; font-weight: 700; }.map-kpis strong { margin-top: 2px; font-family: 'Space Grotesk', sans-serif; font-size: 23px; }.map-kpis small { margin-top: 2px; color: var(--muted-light); font-size: 7px; }.kpi-icon { width: 37px; height: 37px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 0; background: transparent; font-size: 9px; font-weight: 800; }.kpi-icon--blue { color: var(--accent); background: transparent; }.kpi-icon--green { color: var(--ok); background: transparent; }.kpi-icon--purple { color: var(--purple); background: transparent; }.kpi-icon--amber { color: var(--warn); background: transparent; }
-.visual-map-card { min-width: 0; padding: 0; overflow: hidden; container-type: inline-size; }.visual-map-head { min-height: 82px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border-strong); }.visual-map-head > div:first-child { min-width: 0; }.section-kicker { margin: 0; color: var(--accent); font-size: 7.5px; font-weight: 800; letter-spacing: .9px; text-transform: uppercase; }.visual-map-head h2 { margin: 3px 0 1px; font-size: 17px; }.visual-map-head > div > span { color: var(--muted); font-size: 7.5px; }.map-actions { min-width: 0; display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }.map-actions select { width: 110px; min-height: 34px; padding: 0 8px; font-size: 7.3px; }.map-actions select:nth-child(2) { width: 132px; }.map-actions > button { min-height: 34px; padding: 0 10px; font-size: 7.7px; white-space: nowrap; }.map-actions > button svg { width: 13px; }.map-actions .fullscreen-button { border-color: var(--ink); background: transparent; color: var(--text); }.map-actions .fullscreen-button:hover { border-color: var(--ink); background: var(--ink); color: var(--paper); }.map-search { width: 168px; min-width: 0; min-height: 34px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); border-radius: 0; }.map-search svg { width: 12px; flex: 0 0 auto; color: var(--muted-light); }.map-search input { width: 100%; min-width: 0; min-height: 29px; padding: 0; border: 0; outline: 0; font-size: 7.3px; }
+.landscape-view { min-width: 0; display: grid; gap: 20px; container-type: inline-size; }.kpi-disclosure { min-width: 0; border: 1px solid var(--border-strong); background: var(--surface); }.kpi-disclosure-toggle { width: 100%; min-height: 52px; padding: 8px 14px; display: flex; align-items: center; gap: 11px; border: 0; background: var(--surface-soft); color: var(--text); text-align: left; }.kpi-disclosure-toggle:hover { border: 0; background: #e3e0d7; color: var(--text); transform: none; }.kpi-disclosure-toggle > span:nth-child(2) { min-width: 0; display: flex; flex: 1; flex-direction: column; }.kpi-disclosure-toggle strong { font-size: 11.5px; }.kpi-disclosure-toggle small { margin-top: 2px; overflow: hidden; color: var(--muted); font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }.kpi-disclosure-icon { width: 31px; height: 31px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid var(--ink); background: var(--acid); }.kpi-disclosure-icon svg { width: 17px; }.kpi-disclosure-chevron { width: 16px; transition: transform 160ms; }.kpi-disclosure-chevron.open { transform: rotate(180deg); }.kpi-panel-enter-active, .kpi-panel-leave-active { overflow: hidden; transition: opacity 160ms, transform 160ms; }.kpi-panel-enter-from, .kpi-panel-leave-to { opacity: 0; transform: translateY(-5px); }.map-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-top: 1px solid var(--border-strong); }.map-kpis article { min-height: 96px; padding: 15px 16px; display: flex; align-items: center; gap: 12px; border: 0; border-left: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }.map-kpis article:first-child { border-left: 0; }.map-kpis article > div { min-width: 0; display: flex; flex-direction: column; }.map-kpis article > div > span { color: var(--muted); font-size: 8px; font-weight: 700; }.map-kpis strong { margin-top: 2px; font-family: 'Space Grotesk', sans-serif; font-size: 23px; }.map-kpis small { margin-top: 2px; color: var(--muted-light); font-size: 7px; }.kpi-icon { width: 37px; height: 37px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 0; background: transparent; font-size: 9px; font-weight: 800; }.kpi-icon--blue { color: var(--accent); background: transparent; }.kpi-icon--green { color: var(--ok); background: transparent; }.kpi-icon--purple { color: var(--purple); background: transparent; }.kpi-icon--amber { color: var(--warn); background: transparent; }
+.visual-map-card { min-width: 0; padding: 0; overflow: hidden; container-type: inline-size; }.visual-map-head { min-height: 82px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border-strong); }.visual-map-head > div:first-child { min-width: 0; }.section-kicker { margin: 0; color: var(--accent); font-size: 7.5px; font-weight: 800; letter-spacing: .9px; text-transform: uppercase; }.visual-map-head h2 { margin: 3px 0 1px; font-size: 17px; }.visual-map-head > div > span { color: var(--muted); font-size: 7.5px; }.map-actions { min-width: 0; display: grid; justify-items: end; gap: 7px; }.map-filter-tools, .map-command-tools { min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }.map-actions select { width: 110px; min-height: 34px; padding: 0 8px; font-size: 7.3px; }.map-filter-tools select:first-of-type { width: 132px; }.map-command-tools > button { min-height: 34px; padding: 0 10px; font-size: 7.7px; white-space: nowrap; }.map-command-tools > button svg { width: 13px; }.map-icon-tools { display: flex; align-items: center; gap: 4px; }.map-command-tools .icon-tool-button { width: 40px; min-width: 40px; min-height: 40px; padding: 0; }.map-command-tools .icon-tool-button svg { width: 17px; }.map-actions .fullscreen-button { border-color: var(--ink); background: transparent; color: var(--text); }.map-actions .fullscreen-button:hover { border-color: var(--ink); background: var(--ink); color: var(--paper); }.map-search { width: 168px; min-width: 0; min-height: 34px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); border-radius: 0; }.map-search svg { width: 12px; flex: 0 0 auto; color: var(--muted-light); }.map-search input { width: 100%; min-width: 0; min-height: 29px; padding: 0; border: 0; outline: 0; font-size: 7.3px; }
 .density-switch { min-height: 34px; padding: 3px; display: flex; align-items: center; border: 1px solid var(--border-strong); background: var(--surface-raised); }.density-switch button { min-height: 32px; padding: 0 9px; border: 0; background: transparent; color: var(--muted); font-size: 7.7px; }.density-switch button:hover { border: 0; background: var(--surface-muted); color: var(--text); transform: none; }.density-switch button.active { background: var(--ink); color: var(--acid); }
-.relation-legend { min-height: 42px; padding: 6px 12px; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); background: #ebe8df; overflow-x: auto; }.relation-legend button { min-height: 27px; padding: 0 8px; flex: 0 0 auto; border-radius: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 6.7px; }.relation-legend button:hover { border-color: transparent; background: var(--paper); color: var(--text); transform: none; }.relation-legend button.active { border-color: var(--ink); background: var(--ink); color: var(--paper); box-shadow: none; }.relation-legend button i { width: 13px; height: 2px; display: inline-block; background: var(--relation-color, #64748b); vertical-align: middle; }.relation-legend button b { margin-left: 3px; }.relation-legend .label-toggle { margin-left: 4px; border-left: 1px solid var(--border); border-radius: 0; }.relation-legend .label-toggle svg { width: 11px; }.relation-legend > span { margin-left: auto; flex: 0 0 auto; color: var(--muted-light); font-size: 6.3px; }.relation-legend .overview-note { margin: 0 8px 0 0; padding-right: 12px; border-right: 1px solid var(--border-strong); color: var(--text); }.overview-note b { color: #354dcc; }
-.map-shell { height: 700px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); background: #f1efe8; transition: 180ms; }.map-shell--overview { height: 960px; }.landscape-flow { min-width: 0; width: 100%; height: 100%; }.landscape-flow :deep(.vue-flow__node) { width: auto; padding: 0; border: 0; background: transparent; box-shadow: none; }.landscape-flow :deep(.vue-flow__node.selected) { box-shadow: none; }.landscape-flow :deep(.vue-flow__edge-path) { filter: none; transition: opacity 140ms, stroke-width 140ms; }.landscape-flow :deep(.vue-flow__edge.selected .vue-flow__edge-path) { filter: drop-shadow(0 2px 3px rgba(92,118,255,.24)); }.landscape-flow :deep(.vue-flow__edge-label) { font-family: 'DM Sans', sans-serif; }.landscape-flow :deep(.vue-flow__controls) { overflow: hidden; border: 1px solid var(--ink); border-radius: 0; box-shadow: none; }.landscape-flow :deep(.vue-flow__controls-button) { width: 28px; height: 28px; border-color: var(--border); background: var(--paper); color: var(--text); }.landscape-flow :deep(.vue-flow__minimap) { width: 118px; height: 76px; overflow: hidden; border: 1px solid var(--ink); border-radius: 0; background: rgba(241,239,232,.94); box-shadow: none; }.map-loading, .map-empty { position: absolute; inset: 0; display: grid; place-content: center; background: #f1efe8; color: var(--muted); text-align: center; }.map-empty { z-index: 10; }.map-empty strong { font-size: 11px; }.map-empty span { margin-top: 4px; font-size: 8px; }
+.relation-legend { min-height: 42px; padding: 6px 12px; display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); background: #ebe8df; overflow-x: auto; }.relation-legend button { min-height: 27px; padding: 0 8px; flex: 0 0 auto; border-radius: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 6.7px; }.relation-legend button:hover { border-color: transparent; background: var(--paper); color: var(--text); transform: none; }.relation-legend button.active { border-color: var(--ink); background: var(--ink); color: var(--paper); box-shadow: none; }.relation-legend button i { width: 13px; height: 2px; display: inline-block; background: var(--relation-color, #64748b); vertical-align: middle; }.relation-legend button b { margin-left: 3px; }.relation-legend .label-toggle { margin-left: 4px; border-left: 1px solid var(--border); border-radius: 0; }.relation-legend .label-toggle svg { width: 11px; }.relation-legend > span { margin-left: auto; flex: 0 0 auto; color: var(--muted-light); font-size: 6.3px; }.relation-legend .zoom-state { min-height: 28px; margin: 0 8px 0 0; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-weight: 800; white-space: nowrap; }.relation-legend .zoom-state svg { width: 12px; }.relation-legend .zoom-state--domains { border-color: var(--blue); background: var(--accent-soft); color: #354dcc; }.relation-legend .overview-note { margin: 0 8px 0 0; padding-right: 12px; border-right: 1px solid var(--border-strong); color: var(--text); }.overview-note b { color: #354dcc; }
+.map-shell { height: 700px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); background: #f1efe8; transition: 180ms; }.map-shell--overview { height: 960px; }.landscape-flow { min-width: 0; width: 100%; height: 100%; }.landscape-flow :deep(.vue-flow__node) { width: auto; padding: 0; border: 0; background: transparent; box-shadow: none; }.landscape-flow :deep(.vue-flow__node-landscapeProcess) { transition: opacity 180ms; }.landscape-flow :deep(.vue-flow__node.selected) { box-shadow: none; }.landscape-flow :deep(.vue-flow__edge-path) { filter: none; transition: opacity 140ms, stroke-width 140ms; }.landscape-flow :deep(.vue-flow__edge.selected .vue-flow__edge-path) { filter: drop-shadow(0 2px 3px rgba(92,118,255,.24)); }.landscape-flow :deep(.vue-flow__edge-label) { font-family: 'DM Sans', sans-serif; }.map-shell--domains .landscape-flow :deep(.vue-flow__node-landscapeProcess) { opacity: 0; pointer-events: none; }.map-shell--domains .landscape-flow :deep(.vue-flow__edge-path) { stroke-width: 3px !important; opacity: .92 !important; }.map-shell--domains .landscape-flow :deep(.vue-flow__edge-label) { display: none; }.map-shell--domains .landscape-flow :deep(.department-island) { border-width: 2px; background: color-mix(in srgb, var(--department-color) 11%, rgba(248,246,239,.97)); }.map-shell--domains .landscape-flow :deep(.department-island header) { width: max-content; min-width: 220px; transform: scale(1.32); transform-origin: top left; box-shadow: 2px 2px 0 rgba(23,23,20,.1); }.map-shell--domains .landscape-flow :deep(.map-layer > div) { transform: scale(1.22); transform-origin: top left; }.landscape-flow :deep(.vue-flow__controls) { overflow: hidden; border: 1px solid var(--ink); border-radius: 0; box-shadow: none; }.landscape-flow :deep(.vue-flow__controls-button) { width: 28px; height: 28px; border-color: var(--border); background: var(--paper); color: var(--text); }.landscape-flow :deep(.vue-flow__minimap) { width: 118px; height: 76px; overflow: hidden; border: 1px solid var(--ink); border-radius: 0; background: rgba(241,239,232,.94); box-shadow: none; }.map-loading, .map-empty { position: absolute; inset: 0; display: grid; place-content: center; background: #f1efe8; color: var(--muted); text-align: center; }.map-empty { z-index: 10; }.map-empty strong { font-size: 11px; }.map-empty span { margin-top: 4px; font-size: 8px; }
 .relation-detail { width: 276px; padding: 16px; position: absolute; z-index: 8; top: 12px; right: 12px; bottom: 12px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.97); box-shadow: 0 16px 40px rgba(20,34,56,.16); backdrop-filter: blur(8px); }.relation-detail > header { display: flex; justify-content: space-between; }.relation-detail > header > div { display: flex; flex-direction: column; }.relation-detail > header span { font-size: 7px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }.relation-detail > header strong { margin-top: 3px; font-size: 13px; }.relation-detail > header button { width: 27px; min-height: 27px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); font-size: 17px; }.detail-process { width: 100%; min-height: 65px; margin-top: 18px; padding: 11px; align-items: flex-start; flex-direction: column; border-color: var(--border); background: #f9fbfd; color: var(--text); text-align: left; }.detail-process:hover { border-color: #afc0d8; background: #fff; color: var(--text); transform: none; }.detail-process small { color: var(--accent); font-size: 6px; font-weight: 800; text-transform: uppercase; }.detail-process strong { margin-top: 4px; font-size: 9px; }.detail-arrow { height: 32px; display: flex; align-items: center; justify-content: center; flex-direction: column; font-size: 10px; }.detail-arrow i { width: 1px; height: 13px; background: currentColor; }.detail-handoff { padding: 11px; border: 1px solid #dce4ef; border-radius: 8px; background: #fff; text-align: center; }.detail-handoff small { display: block; color: var(--muted-light); font-size: 6px; font-weight: 700; text-transform: uppercase; }.detail-handoff strong { margin-top: 4px; display: block; font-size: 8px; line-height: 1.4; }.delete-relation { width: 100%; margin-top: 20px; border-color: #f0c9c9; background: var(--err-soft); color: var(--err); }.delete-relation:hover { border-color: #e8aaaa; background: #ffe8e8; color: var(--err); }.delete-relation svg { width: 13px; }
 .visual-map-card--fullscreen { width: 100vw; height: 100vh; position: fixed; z-index: 1000; inset: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); border: 0; border-radius: 0; background: #fff; box-shadow: none; }.visual-map-card--fullscreen .visual-map-head { min-height: 70px; padding: 11px 16px; }.visual-map-card--fullscreen .map-shell { height: auto; min-height: 0; }.visual-map-card:fullscreen { width: 100vw; height: 100vh; display: grid; grid-template-rows: auto auto minmax(0, 1fr); border: 0; border-radius: 0; background: #fff; }.visual-map-card:fullscreen .map-shell { height: auto; min-height: 0; }
 @media (max-width: 1180px) { .map-kpis { grid-template-columns: 1fr 1fr; }.visual-map-head { align-items: flex-start; flex-direction: column; }.map-actions { width: 100%; flex-wrap: wrap; }.map-search { flex: 1; }.map-shell { height: 680px; }.visual-map-card--fullscreen .visual-map-head, .visual-map-card:fullscreen .visual-map-head { align-items: center; flex-direction: row; }.visual-map-card--fullscreen .map-actions, .visual-map-card:fullscreen .map-actions { width: auto; } }
@@ -527,7 +582,7 @@ onBeforeUnmount(() => {
 .visual-map-card--fullscreen, .visual-map-card:fullscreen { background: var(--paper); }
 
 /* The portfolio summary and map tools form separate, readable planes. */
-.map-kpis { border: 1px solid var(--border-strong); background: var(--surface); }
+.map-kpis { border: 0; background: var(--surface); }
 .map-kpis article { min-height: 112px; padding: 18px; border-left-color: var(--border-strong); background: var(--surface); }
 .map-kpis article:nth-child(even) { background: var(--surface-muted); }
 .map-kpis article > div > span { color: #4f4e48; font-size: 11.5px; }
@@ -538,7 +593,7 @@ onBeforeUnmount(() => {
 .visual-map-head h2 { font-size: 20px; }
 .visual-map-head > div > span { color: #575750; font-size: 11px; }
 .map-actions select { min-height: 40px; padding-inline: 10px; font-size: 10.5px; background: var(--surface-raised); }
-.map-actions > button { min-height: 40px; font-size: 10.5px; }
+.map-command-tools > button { min-height: 40px; font-size: 10.5px; }
 .map-search { min-height: 40px; background: var(--surface-raised); }
 .map-search input { min-height: 34px; font-size: 10.5px; background: transparent; }
 .density-switch { min-height: 40px; }
@@ -554,12 +609,32 @@ onBeforeUnmount(() => {
 .detail-process small, .detail-handoff small { font-size: 9px; }
 .detail-process strong { font-size: 12px; }
 .detail-handoff strong { font-size: 11px; }
+.broom-icon { font-size: 16px; line-height: 1; }
+
+/* Keep domain and layer names legible while the canvas itself is scaled down. */
+.map-shell--domains .landscape-flow :deep(.department-island header) {
+  display: none;
+}
+.landscape-flow :deep(.vue-flow__node-departmentLabel) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms;
+}
+.map-shell--domains .landscape-flow :deep(.vue-flow__node-departmentLabel) {
+  opacity: 1;
+}
+.map-shell--domains .landscape-flow :deep(.map-layer > div) {
+  transform: scale(var(--semantic-label-scale, 1.7));
+  transform-origin: top left;
+}
 
 @container (max-width: 1250px) {
   .visual-map-head { align-items: stretch; flex-direction: column; gap: 15px; }
   .visual-map-head > div:first-child { max-width: 720px; }
-  .map-actions { width: 100%; display: grid; grid-template-columns: minmax(190px, 1.6fr) repeat(3, minmax(120px, 1fr)); }
-  .map-search, .map-actions select, .map-actions select:nth-child(2), .map-actions > button, .density-switch { width: 100%; }
+  .map-actions { width: 100%; justify-items: stretch; }
+  .map-filter-tools { display: grid; grid-template-columns: minmax(190px, 1.6fr) repeat(3, minmax(120px, 1fr)); }
+  .map-search, .map-actions select, .map-filter-tools select:first-of-type { width: 100%; }
+  .map-command-tools { justify-content: flex-end; }
 }
 
 @container (max-width: 1000px) {
@@ -569,14 +644,18 @@ onBeforeUnmount(() => {
 }
 
 @container (max-width: 760px) {
-  .map-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .map-search { grid-column: 1 / -1; }
+  .map-filter-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .map-search { grid-column: 1 / -1; width: 100%; }
+  .map-command-tools { justify-content: flex-start; }
+  .relation-legend .zoom-state { display: inline-flex; }
 }
 
 @container (max-width: 520px) {
-  .map-kpis, .map-actions { grid-template-columns: 1fr; }
+  .map-kpis, .map-filter-tools { grid-template-columns: 1fr; }
   .map-search { grid-column: auto; }
   .map-kpis article { border-left: 0; }
   .density-switch button { flex: 1; }
+  .map-command-tools { display: grid; grid-template-columns: 1fr auto auto; }
+  .map-command-tools > button:last-child { grid-column: 1 / -1; }
 }
 </style>
