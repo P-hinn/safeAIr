@@ -26,10 +26,10 @@ safAIr bündelt PII-Erkennung und Anonymisierung, Guardrails, Content-Moderation
 | **Management-Dashboard** | Überblick über Services, Policies, AI-Inventar und Prozessabdeckung |
 | **Prozesslandkarte** | Prozesse nach Bereichen und Ebenen visualisieren, BPMN 2.0 importieren/exportieren (bpmn-js), AI-Einsatz und Risiken pro Aktivität annotieren; Prozessentwürfe per LLM aus Text oder Spracheingabe generieren |
 | **PII & Datenschutz** | Personenbezogene Daten mit Presidio oder Scrubadub erkennen und anonymisieren; Adapter für Google Cloud DLP und AWS Comprehend |
-| **Guardrails** | Prompts und Modellantworten auf Prompt Injection, Secrets und Richtlinienverstöße prüfen; Adapter für LLM Guard, Guardrails AI, NeMo Guardrails, OpenAI Guardrails und Lakera Guard |
+| **Guardrails** | Prompts und Modellantworten auf Prompt Injection, Jailbreaks und Secrets prüfen; regelbasierte Engine plus Adapter für LLM Guard, NeMo Guardrails und Lakera Guard |
 | **Content-Moderation** | Inhalte mit Llama Guard 3 (via Ollama) klassifizieren |
-| **Red Teaming** | Promptfoo-Läufe starten und verfolgen; Garak optional |
-| **Orchestrierung & Playground** | Policies verwalten und Chat-Anfragen durch die Pipeline *PII → Guardrails → Moderation → LLM → Output-Prüfung* schicken – mit vollständigem Trace pro Schritt. Provider: Ollama, OpenAI, Anthropic |
+| **Red Teaming** | Promptfoo- und Garak-Läufe aus festen Presets starten und verfolgen |
+| **Orchestrierung & Playground** | Policies verwalten und Chat-Anfragen inkl. Verlauf durch die Pipeline *PII → Guardrails → Moderation → LLM → Output-Prüfung* schicken – mit vollständigem Trace pro Schritt. Provider: Ollama, OpenAI, Anthropic |
 | **Monitoring** | Verfügbarkeit, Latenzen, Endpoint-Historie und AI-Inventar aller Services |
 
 ## Architektur
@@ -77,7 +77,9 @@ Details: [Architekturdokumentation](docs/architecture.md) · [Tool-Matrix](docs/
 Voraussetzung: Docker mit Docker Compose.
 
 ```bash
-cp .env.example .env   # SITE_PASSWORD setzen (mind. 12 Zeichen)
+cp .env.example .env
+# in .env: SITE_PASSWORD (mind. 12 Zeichen) und SESSION_SECRET setzen,
+# z. B. SESSION_SECRET=$(openssl rand -base64 48)
 docker compose up --build
 ```
 
@@ -89,9 +91,11 @@ docker compose up --build
 | Gateway Health | <http://localhost:8080/health> |
 
 > [!IMPORTANT]
-> Ohne gültiges `SITE_PASSWORD` (≥ 12 Zeichen) verweigern Web-App und Gateway den Zugriff. LLM-Provider (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_URL`) und optionale Engines werden in `.env` aktiviert – alle Variablen sind in [`.env.example`](.env.example) dokumentiert.
+> Ohne `SITE_PASSWORD` (≥ 12 Zeichen) und `SESSION_SECRET` (≥ 32 Zeichen) verweigern Web-App und Gateway den Zugriff. LLM-Provider (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_URL`) und optionale Engines werden in `.env` aktiviert – alle Variablen sind in [`.env.example`](.env.example) dokumentiert.
 
 ### Entwicklung ohne Docker
+
+Web-App und Gateway lesen die Variablen aus der Umgebung; am einfachsten vorher die `.env` exportieren (`set -a; source .env; set +a`) und die Service-URLs auf `http://localhost:<port>` setzen.
 
 ```bash
 # Web-App
@@ -135,7 +139,8 @@ Alle Endpunkte laufen über das Gateway. Die vollständige OpenAPI-3-Spezifikati
 | `POST` | `/api/guardrails/v1/scan/output` | Modellantwort prüfen |
 | `POST` | `/api/moderation/v1/moderate` | Inhalt moderieren |
 | `GET` | `/api/redteam/v1/tools` | Red-Teaming-Tools und Status |
-| `POST` | `/api/redteam/v1/scans` | Red-Team-Scan starten |
+| `GET` | `/api/redteam/v1/presets` | Erlaubte Scan-Presets |
+| `POST` | `/api/redteam/v1/scans` | Red-Team-Scan aus einem Preset starten |
 | `GET` | `/api/redteam/v1/scans/{id}` | Status und Ergebnis eines Scans |
 | `GET` | `/api/orchestrator/v1/providers` | Provider und Modelle auflisten |
 | `GET` · `POST` · `PUT` · `DELETE` | `/api/orchestrator/v1/policies` | Sicherheitsrichtlinien verwalten |
@@ -151,6 +156,16 @@ curl -X POST http://localhost:8080/api/pii/v1/anonymize \
   -b 'safair_session=…' \
   -d '{"text": "Max Mustermann, max@example.com", "language": "de", "engine": "presidio"}'
 ```
+
+## Sicherheit
+
+- **Ein Eintrittspunkt:** Nur Web-App und Gateway sind erreichbar; die internen Services laufen ohne eigene Auth im privaten Netz.
+- **Session:** HMAC-signiertes Cookie mit eigenem `SESSION_SECRET`, `HttpOnly`, `SameSite=Strict`, timing-sichere Vergleiche, Login-Rate-Limit.
+- **Red Teaming:** keine freien CLI-Argumente, nur validierte Presets; maximal zwei parallele Läufe.
+- **Pipeline:** Auch der vom Client gesendete Chat-Verlauf durchläuft PII- und Guardrail-Prüfung; eingebaute Policies sind schreibgeschützt.
+- **Secrets** nur über Umgebungsvariablen, nie im Repository.
+
+Bekannte Grenzen (gemeinsames Passwort statt Benutzerverwaltung, In-Memory-Jobs, SQLite) sind in der [Architekturdokumentation](docs/architecture.md#bekannte-grenzen) beschrieben.
 
 ## Deployment
 
