@@ -69,7 +69,7 @@ def engines():
                 "name": "llama-guard",
                 "title": "Llama Guard 3 (Meta, via Ollama)",
                 "status": "ready" if configured else "not_configured",
-                "detail": f"Ollama unter {_ollama_url()} mit Modell {_model()}."
+                "detail": f"Ollama konfiguriert, Modell {_model()}."
                 if configured
                 else "OLLAMA_URL in .env setzen und `ollama pull llama-guard3` ausführen.",
                 "docs_url": "https://github.com/meta-llama/PurpleLlama",

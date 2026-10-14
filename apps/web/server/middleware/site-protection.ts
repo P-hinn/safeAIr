@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
 
   if (!protectionConfigured()) {
     setResponseStatus(event, 503)
-    return 'Der Zugangsschutz ist noch nicht konfiguriert. Bitte SITE_PASSWORD als verschlüsselte Runtime-Variable setzen.'
+    return 'Der Zugangsschutz ist noch nicht konfiguriert. Bitte SITE_PASSWORD (mind. 12 Zeichen) und SESSION_SECRET (mind. 32 Zeichen) als verschlüsselte Runtime-Variablen setzen.'
   }
 
   if (hasValidSession(event)) return

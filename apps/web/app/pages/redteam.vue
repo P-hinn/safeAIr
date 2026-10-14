@@ -41,8 +41,8 @@ async function showJob(id: string) {
   <div>
     <h1>Red Teaming</h1>
     <p style="color: var(--muted)">
-      Scan-Läufe mit Promptfoo oder Garak. Jobs werden per API gestartet
-      (<code>POST /api/redteam/v1/scans</code>), z. B. aus CI oder per curl – Beispiele in der README des Service.
+      Scan-Läufe mit Promptfoo oder Garak. Jobs werden per API aus vordefinierten Presets gestartet
+      (<code>GET /api/redteam/v1/presets</code>, <code>POST /api/redteam/v1/scans</code>) – Beispiele in der Swagger-Dokumentation.
     </p>
 
     <div class="card">

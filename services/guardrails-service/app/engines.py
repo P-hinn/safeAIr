@@ -111,7 +111,7 @@ class GuardrailsAiEngine:
             name=self.name,
             title="Guardrails AI",
             status="not_configured",
-            detail="Validatoren über Guardrails Hub installieren und in engines.py im Guard registrieren.",
+            detail="Engine-Platzhalter: Paket ist installiert, die Anbindung eines Guards mit Hub-Validatoren ist noch nicht umgesetzt.",
             docs_url="https://github.com/guardrails-ai/guardrails",
         )
 
@@ -172,10 +172,10 @@ class OpenAiGuardrailsEngine:
         return EngineInfo(
             name=self.name,
             title="OpenAI Guardrails",
-            status="not_configured" if os.environ.get("OPENAI_API_KEY") else "not_configured",
+            status="not_configured",
             detail=(
-                "OPENAI_API_KEY setzen und Paket 'openai-guardrails' installieren. "
-                "Achtung: Namespace-Konflikt mit guardrails-ai – nicht beide gleichzeitig installieren."
+                "Engine-Platzhalter: Anbindung noch nicht umgesetzt. Benötigt später OPENAI_API_KEY und das Paket "
+                "'openai-guardrails' (Namespace-Konflikt mit guardrails-ai – nicht beide gleichzeitig installieren)."
             ),
             docs_url="https://github.com/openai/openai-guardrails-python",
         )

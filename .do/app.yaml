@@ -3,10 +3,13 @@
 # Create/update the app with:
 #   doctl apps create --spec .do/app.yaml --upsert
 #
-# Secrets are intentionally not stored in Git. Before exposing the app, add a
-# shared SITE_PASSWORD (minimum 12 characters) as an encrypted app-level runtime
-# variable. Add OPENAI_API_KEY, ANTHROPIC_API_KEY and LAKERA_GUARD_API_KEY the
-# same way when the corresponding integrations are used.
+# Secrets are intentionally not stored in Git. Before exposing the app, add
+# SITE_PASSWORD (minimum 12 characters) and SESSION_SECRET (minimum 32 random
+# characters) as encrypted app-level runtime variables. Add OPENAI_API_KEY,
+# ANTHROPIC_API_KEY and LAKERA_GUARD_API_KEY the same way when the
+# corresponding integrations are used. Llama Guard moderation and the default
+# Ollama-based policies additionally need OLLAMA_URL pointing to a reachable
+# Ollama instance.
 
 name: safeair
 region: fra
@@ -69,6 +72,14 @@ services:
     envs:
       - key: NUXT_PUBLIC_API_BASE
         value: '${APP_URL}'
+        scope: RUN_TIME
+        type: GENERAL
+      - key: TRUST_PROXY
+        value: 'true'
+        scope: RUN_TIME
+        type: GENERAL
+      - key: COOKIE_SECURE
+        value: 'true'
         scope: RUN_TIME
         type: GENERAL
     health_check:

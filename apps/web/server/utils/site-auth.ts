@@ -14,16 +14,22 @@ export function sitePassword() {
   return process.env.SITE_PASSWORD ?? ''
 }
 
+// Separater, zufälliger Schlüssel: Würde das Passwort selbst signieren, ließe es
+// sich aus einem einzigen Session-Cookie offline per Brute Force ermitteln.
+function sessionSecret() {
+  return process.env.SESSION_SECRET ?? ''
+}
+
 export function protectionRequired() {
   return process.env.NODE_ENV === 'production' || Boolean(sitePassword())
 }
 
 export function protectionConfigured() {
-  return sitePassword().length >= 12
+  return sitePassword().length >= 12 && sessionSecret().length >= 32
 }
 
 function signature(payload: string) {
-  return createHmac('sha256', `safair-session:${sitePassword()}`)
+  return createHmac('sha256', sessionSecret())
     .update(payload)
     .digest('base64url')
 }
@@ -61,6 +67,7 @@ export function hasValidSession(event: H3Event) {
 }
 
 function requestUsesHttps(event: H3Event) {
+  if (process.env.COOKIE_SECURE === 'true') return true
   const forwardedProtocol = getRequestHeader(event, 'x-forwarded-proto')?.split(',')[0]?.trim()
   return forwardedProtocol === 'https'
 }

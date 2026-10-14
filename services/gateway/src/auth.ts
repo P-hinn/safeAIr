@@ -6,8 +6,12 @@ function sitePassword() {
   return process.env.SITE_PASSWORD ?? ''
 }
 
+function sessionSecret() {
+  return process.env.SESSION_SECRET ?? ''
+}
+
 export function protectionConfigured() {
-  return sitePassword().length >= 12
+  return sitePassword().length >= 12 && sessionSecret().length >= 32
 }
 
 function safeEqual(left: string, right: string) {
@@ -17,7 +21,7 @@ function safeEqual(left: string, right: string) {
 }
 
 function signature(payload: string) {
-  return createHmac('sha256', `safair-session:${sitePassword()}`)
+  return createHmac('sha256', sessionSecret())
     .update(payload)
     .digest('base64url')
 }

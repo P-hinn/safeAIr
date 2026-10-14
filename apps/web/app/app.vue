@@ -186,7 +186,7 @@ watch(sidebarCollapsed, (value) => {
         <div class="topbar-actions">
           <NuxtLink to="/monitoring" class="topbar-link topbar-monitor"><span /> Live Monitoring</NuxtLink>
           <form action="/auth/logout" method="post" class="logout-form">
-            <button class="user-avatar" title="Sicher abmelden" aria-label="Abmelden">MW<span>Abmelden</span></button>
+            <button class="user-avatar" title="Sicher abmelden" aria-label="Abmelden"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 3v8" /><path d="M6.3 6.8a8 8 0 1 0 11.4 0" /></svg><span>Abmelden</span></button>
           </form>
         </div>
       </header>

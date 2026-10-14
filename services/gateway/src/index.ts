@@ -21,7 +21,7 @@ app.addHook('onRequest', async (request, reply) => {
   if (!protectionConfigured()) {
     return reply.code(503).send({
       error: 'protection_not_configured',
-      message: 'SITE_PASSWORD must be configured with at least 12 characters.'
+      message: 'SITE_PASSWORD (mind. 12 Zeichen) und SESSION_SECRET (mind. 32 Zeichen) müssen konfiguriert sein.'
     })
   }
 

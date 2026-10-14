@@ -152,6 +152,33 @@ def _moderation_step(step_name: str, role: str, cfg: dict, text: str, trace: Tra
     trace.add(step_name, "warned", detail, started, result)
 
 
+def _history_step(cfg: dict, history: list[dict], language: str, trace: Trace) -> list[dict]:
+    """Prüft frühere Nutzernachrichten wie den aktuellen Prompt.
+
+    Der Verlauf kommt vom Client und darf weder PII am Filter vorbei zum LLM
+    schmuggeln noch Prompt-Injection-Versuche ungeprüft weiterreichen.
+    """
+    if not any(m["role"] == "user" for m in history):
+        return history
+    started = time.monotonic()
+    sub = Trace(fail_closed=trace.fail_closed)
+    sanitized: list[dict] = []
+    try:
+        for m in history:
+            if m["role"] == "user":
+                m = {**m, "content": _pii_step("pii_history", cfg.get("pii_prompt", {}), m["content"], language, sub)}
+            sanitized.append(m)
+        user_text = "\n\n".join(m["content"] for m in sanitized if m["role"] == "user")
+        _guardrails_step("guardrails_history", "prompt", cfg.get("guardrails_prompt", {}), user_text, sub)
+    finally:
+        relevant = [e for e in sub.entries if e["status"] not in ("ok", "skipped")]
+        trace.entries.extend(relevant)
+    if not relevant:
+        count = sum(1 for m in history if m["role"] == "user")
+        trace.add("history", "ok", f"Verlauf geprüft ({count} Nutzernachrichten)", started)
+    return sanitized
+
+
 def run_pipeline(
     message: str,
     history: list[dict],
@@ -167,6 +194,7 @@ def run_pipeline(
 
     try:
         # --- Eingangsseite ---
+        history = _history_step(cfg, history, language, trace)
         message = _pii_step("pii_prompt", cfg.get("pii_prompt", {}), message, language, trace)
         _guardrails_step("guardrails_prompt", "prompt", cfg.get("guardrails_prompt", {}), message, trace)
         _moderation_step("moderation_prompt", "user", cfg.get("moderation_prompt", {}), message, trace)
