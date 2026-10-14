@@ -16,8 +16,7 @@
 
 safAIr bündelt PII-Erkennung und Anonymisierung, Guardrails, Content-Moderation, Red Teaming und die Orchestrierung von LLM-Anfragen hinter einer gemeinsamen Weboberfläche und API. Sicherheitsrichtlinien werden zentral gepflegt, Engines pro Request gewählt und alle Services über ein integriertes Monitoring beobachtet. Dazu kommt eine Prozesslandkarte mit BPMN-Editor, in der sich AI-Einsatz entlang der Geschäftsprozesse dokumentieren und bewerten lässt.
 
-> [!NOTE]
-> Portfolio-Projekt. Die Anwendung war zeitweise auf der DigitalOcean App Platform deployed ([`.do/app.yaml`](.do/app.yaml)), ist aktuell aber nicht mehr öffentlich erreichbar. Lokal läuft der komplette Stack per Docker Compose.
+![Management-Dashboard](docs/screenshots/dashboard.png)
 
 ## Funktionsumfang
 
@@ -31,6 +30,16 @@ safAIr bündelt PII-Erkennung und Anonymisierung, Guardrails, Content-Moderation
 | **Red Teaming** | Promptfoo- und Garak-Läufe aus festen Presets starten und verfolgen |
 | **Orchestrierung & Playground** | Policies verwalten und Chat-Anfragen inkl. Verlauf durch die Pipeline *PII → Guardrails → Moderation → LLM → Output-Prüfung* schicken – mit vollständigem Trace pro Schritt. Provider: Ollama, OpenAI, Anthropic |
 | **Monitoring** | Verfügbarkeit, Latenzen, Endpoint-Historie und AI-Inventar aller Services |
+
+### Screenshots
+
+| Prozesslandkarte – AI Data Flow Map | Workflow-Designer (BPMN) |
+|---|---|
+| ![Prozesslandkarte mit Datenflüssen zu externen LLM-Anbietern](docs/screenshots/process-map.png) | ![BPMN-Workflow-Designer mit KI-Kennzeichnung pro Aktivität](docs/screenshots/designer.png) |
+
+| Platform Monitoring |
+|---|
+| ![Monitoring aller Services, Endpunkte und AI-Komponenten](docs/screenshots/monitoring.png) |
 
 ## Architektur
 
