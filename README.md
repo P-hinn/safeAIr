@@ -174,7 +174,3 @@ Bekannte Grenzen (gemeinsames Passwort statt Benutzerverwaltung, In-Memory-Jobs,
 ```bash
 doctl apps create --spec .do/app.yaml --upsert
 ```
-
-## Autor
-
-**Philipp Niestroj** – freiberuflicher Software Engineer · [GitHub](https://github.com/P-hinn)
