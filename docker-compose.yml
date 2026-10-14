@@ -1,5 +1,9 @@
 name: safair
 
+# Nur Web-App (3000) und Gateway (8080) sind von außen erreichbar. Die internen
+# Services haben keine eigene Authentifizierung und werden deshalb nur auf
+# 127.0.0.1 gemappt (lokales Debugging).
+
 services:
   web:
     build: ./apps/web
@@ -8,6 +12,7 @@ services:
     environment:
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-http://localhost:8080}
       SITE_PASSWORD: ${SITE_PASSWORD:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
     depends_on:
       gateway:
         condition: service_started
@@ -25,6 +30,7 @@ services:
       ORCHESTRATOR_SERVICE_URL: http://orchestrator:8005
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SITE_PASSWORD: ${SITE_PASSWORD:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
     depends_on:
       pii-service:
         condition: service_healthy
@@ -40,9 +46,14 @@ services:
   pii-service:
     build: ./services/pii-service
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
       PII_LANGUAGES: ${PII_LANGUAGES:-en,de}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      AWS_REGION: ${AWS_REGION:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 10s
@@ -53,7 +64,7 @@ services:
   guardrails-service:
     build: ./services/guardrails-service
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     environment:
       GUARDRAILS_ENGINE: ${GUARDRAILS_ENGINE:-heuristic}
       LAKERA_GUARD_API_KEY: ${LAKERA_GUARD_API_KEY:-}
@@ -69,7 +80,7 @@ services:
   moderation-service:
     build: ./services/moderation-service
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     environment:
       OLLAMA_URL: ${OLLAMA_URL:-}
       MODERATION_MODEL: ${MODERATION_MODEL:-llama-guard3}
@@ -85,7 +96,7 @@ services:
   orchestrator:
     build: ./services/orchestrator
     ports:
-      - "8005:8005"
+      - "127.0.0.1:8005:8005"
     environment:
       PII_SERVICE_URL: http://pii-service:8001
       GUARDRAILS_SERVICE_URL: http://guardrails-service:8002
@@ -110,7 +121,7 @@ services:
   redteam-service:
     build: ./services/redteam-service
     ports:
-      - "8004:8004"
+      - "127.0.0.1:8004:8004"
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

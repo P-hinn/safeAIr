@@ -5,7 +5,7 @@ const jsonObject = {
 
 const errorResponses = {
   401: {
-    description: 'Keine gueltige safAIr-Session.',
+    description: 'Keine gültige safAIr-Session.',
     content: {
       'application/json': {
         schema: { $ref: '#/components/schemas/ApiError' },
@@ -14,7 +14,7 @@ const errorResponses = {
     }
   },
   422: {
-    description: 'Der Request ist fachlich oder syntaktisch ungueltig.',
+    description: 'Der Request ist fachlich oder syntaktisch ungültig.',
     content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiError' } } }
   },
   503: {
@@ -41,13 +41,13 @@ export const openApiDocument = {
     title: 'safAIr Platform API',
     version: '1.0.0',
     description: [
-      'Zentrale API fuer AI Governance, Datenschutz, Guardrails, Moderation und Red Teaming.',
+      'Zentrale API für AI Governance, Datenschutz, Guardrails, Moderation und Red Teaming.',
       '',
       '### Authentifizierung',
       'Die API nutzt dieselbe signierte `safair_session`-Cookie-Session wie das Web-Interface. Melde dich zuerst in safAIr an; Requests aus dieser Dokumentation senden das Cookie automatisch mit.',
       '',
       '### Fehlerformat',
-      'Validierungs- und Servicefehler werden als JSON mit einem stabilen Fehlercode ausgeliefert. Proxied FastAPI-Validierungsfehler koennen zusaetzlich ein `detail`-Feld enthalten.'
+      'Validierungs- und Servicefehler werden als JSON mit einem stabilen Fehlercode ausgeliefert. Proxied FastAPI-Validierungsfehler können zusätzlich ein `detail`-Feld enthalten.'
     ].join('\n')
   },
   externalDocs: {
@@ -57,11 +57,11 @@ export const openApiDocument = {
   servers: [{ url: '/', description: 'Aktueller safAIr-Host' }],
   tags: [
     { name: 'Systemstatus', description: 'Readiness, Health und Plattformstatus.' },
-    { name: 'Monitoring', description: 'Aggregierte Verfuegbarkeit, Latenzen und AI-Inventar.' },
+    { name: 'Monitoring', description: 'Aggregierte Verfügbarkeit, Latenzen und AI-Inventar.' },
     { name: 'PII & Datenschutz', description: 'Personenbezogene Daten erkennen und anonymisieren.' },
-    { name: 'Guardrails', description: 'Prompts und Modellantworten gegen Sicherheitsregeln pruefen.' },
+    { name: 'Guardrails', description: 'Prompts und Modellantworten gegen Sicherheitsregeln prüfen.' },
     { name: 'Moderation', description: 'Inhalte mit Llama Guard klassifizieren.' },
-    { name: 'Red Teaming', description: 'Promptfoo- und Garak-Sicherheitslaeufe steuern.' },
+    { name: 'Red Teaming', description: 'Promptfoo- und Garak-Sicherheitsläufe steuern.' },
     { name: 'Orchestrator', description: 'AI Provider, Policies und die sichere Chat-Pipeline.' }
   ],
   security: [{ SessionCookie: [] }],
@@ -70,7 +70,7 @@ export const openApiDocument = {
       get: {
         tags: ['Systemstatus'],
         summary: 'Gateway Readiness',
-        description: 'Minimaler, oeffentlicher Health Check fuer die Deployment-Plattform.',
+        description: 'Minimaler, öffentlicher Health Check für die Deployment-Plattform.',
         security: [],
         responses: {
           200: {
@@ -116,7 +116,7 @@ export const openApiDocument = {
       post: {
         tags: ['Monitoring'],
         summary: 'Monitoring sofort aktualisieren',
-        description: 'Umgeht den kurzen Snapshot-Cache und prueft alle konfigurierten Endpunkte erneut.',
+        description: 'Umgeht den kurzen Snapshot-Cache und prüft alle konfigurierten Endpunkte erneut.',
         responses: {
           200: {
             description: 'Frisch erzeugter Plattform-Snapshot.',
@@ -133,7 +133,7 @@ export const openApiDocument = {
         summary: 'PII-Engines auflisten',
         responses: {
           200: {
-            description: 'Verfuegbare Engines und deren Konfigurationsstatus.',
+            description: 'Verfügbare Engines und deren Konfigurationsstatus.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/EngineInventory' } } }
           },
           ...errorResponses
@@ -155,10 +155,10 @@ export const openApiDocument = {
         },
         responses: {
           200: {
-            description: 'Gefundene Entitaeten mit Position und Konfidenz.',
+            description: 'Gefundene Entitäten mit Position und Konfidenz.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/PiiAnalysis' } } }
           },
-          409: { description: 'Die gewaehlte Engine ist nicht einsatzbereit.' },
+          409: { description: 'Die gewählte Engine ist nicht einsatzbereit.' },
           ...errorResponses
         }
       }
@@ -178,10 +178,10 @@ export const openApiDocument = {
         },
         responses: {
           200: {
-            description: 'Anonymisierter Text und erkannte Entitaeten.',
+            description: 'Anonymisierter Text und erkannte Entitäten.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/PiiAnonymization' } } }
           },
-          409: { description: 'Die gewaehlte Engine ist nicht einsatzbereit.' },
+          409: { description: 'Die gewählte Engine ist nicht einsatzbereit.' },
           ...errorResponses
         }
       }
@@ -203,7 +203,7 @@ export const openApiDocument = {
     '/api/guardrails/v1/scan/prompt': {
       post: {
         tags: ['Guardrails'],
-        summary: 'Eingabe-Prompt pruefen',
+        summary: 'Eingabe-Prompt prüfen',
         requestBody: {
           required: true,
           content: {
@@ -214,8 +214,8 @@ export const openApiDocument = {
           }
         },
         responses: {
-          200: { description: 'Guardrail-Entscheidung der gewaehlten Engine.', content: { 'application/json': { schema: jsonObject } } },
-          409: { description: 'Die gewaehlte Engine ist nicht einsatzbereit.' },
+          200: { description: 'Guardrail-Entscheidung der gewählten Engine.', content: { 'application/json': { schema: jsonObject } } },
+          409: { description: 'Die gewählte Engine ist nicht einsatzbereit.' },
           ...errorResponses
         }
       }
@@ -223,7 +223,7 @@ export const openApiDocument = {
     '/api/guardrails/v1/scan/output': {
       post: {
         tags: ['Guardrails'],
-        summary: 'Modellantwort pruefen',
+        summary: 'Modellantwort prüfen',
         requestBody: {
           required: true,
           content: {
@@ -234,8 +234,8 @@ export const openApiDocument = {
           }
         },
         responses: {
-          200: { description: 'Guardrail-Entscheidung der gewaehlten Engine.', content: { 'application/json': { schema: jsonObject } } },
-          409: { description: 'Die gewaehlte Engine ist nicht einsatzbereit.' },
+          200: { description: 'Guardrail-Entscheidung der gewählten Engine.', content: { 'application/json': { schema: jsonObject } } },
+          409: { description: 'Die gewählte Engine ist nicht einsatzbereit.' },
           ...errorResponses
         }
       }
@@ -260,7 +260,7 @@ export const openApiDocument = {
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ModerationRequest' },
-              example: { text: 'Zu pruefender Inhalt', role: 'user' }
+              example: { text: 'Zu prüfender Inhalt', role: 'user' }
             }
           }
         },
@@ -277,7 +277,17 @@ export const openApiDocument = {
         tags: ['Red Teaming'],
         summary: 'Red-Teaming-Tools auflisten',
         responses: {
-          200: { description: 'Promptfoo- und Garak-Verfuegbarkeit.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ToolInventory' } } } },
+          200: { description: 'Promptfoo- und Garak-Verfügbarkeit.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ToolInventory' } } } },
+          ...errorResponses
+        }
+      }
+    },
+    '/api/redteam/v1/presets': {
+      get: {
+        tags: ['Red Teaming'],
+        summary: 'Erlaubte Scan-Presets auflisten',
+        responses: {
+          200: { description: 'Vordefinierte Scan-Presets; nur diese können gestartet werden.', content: { 'application/json': { schema: { type: 'object', required: ['presets'], properties: { presets: { type: 'array', items: jsonObject } } } } } },
           ...errorResponses
         }
       }
@@ -294,20 +304,22 @@ export const openApiDocument = {
       post: {
         tags: ['Red Teaming'],
         summary: 'Red-Team-Scan starten',
-        description: 'Startet einen asynchronen Promptfoo- oder Garak-Prozess. Argumente werden direkt an das Tool weitergereicht.',
+        description: 'Startet einen asynchronen Promptfoo- oder Garak-Prozess aus einem vordefinierten Preset. Freie CLI-Argumente sind nicht erlaubt.',
         requestBody: {
           required: true,
           content: {
             'application/json': {
               schema: { $ref: '#/components/schemas/ScanRequest' },
-              example: { tool: 'promptfoo', args: ['redteam', 'run', '--config', 'promptfooconfig.yaml'] }
+              example: { preset: 'garak-probe', model: 'gpt-4o-mini', probe: 'dan' }
             }
           }
         },
         responses: {
           201: { description: 'Scan wurde gestartet.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScanJob' } } } },
-          409: { description: 'Tool ist nicht installiert oder der Job konnte nicht gestartet werden.' },
-          ...errorResponses
+          409: { description: 'Tool ist nicht installiert.' },
+          429: { description: 'Maximale Anzahl paralleler Scans erreicht.' },
+          ...errorResponses,
+          422: { description: 'Unbekanntes Preset oder ungültige Parameter.' }
         }
       }
     },
@@ -329,7 +341,7 @@ export const openApiDocument = {
         tags: ['Orchestrator'],
         summary: 'AI Provider und Modelle auflisten',
         responses: {
-          200: { description: 'Konfigurierte Provider, Modelle und Verfuegbarkeit.', content: { 'application/json': { schema: { type: 'object', required: ['providers'], properties: { providers: { type: 'array', items: jsonObject } } } } } },
+          200: { description: 'Konfigurierte Provider, Modelle und Verfügbarkeit.', content: { 'application/json': { schema: { type: 'object', required: ['providers'], properties: { providers: { type: 'array', items: jsonObject } } } } } },
           ...errorResponses
         }
       }
@@ -367,11 +379,11 @@ export const openApiDocument = {
       },
       delete: {
         tags: ['Orchestrator'],
-        summary: 'Policy loeschen',
+        summary: 'Policy löschen',
         parameters: [{ $ref: '#/components/parameters/PolicyId' }],
         responses: {
-          200: { description: 'Bestaetigung der geloeschten Policy.', content: { 'application/json': { schema: { type: 'object', required: ['deleted'], properties: { deleted: { type: 'string' } } } } } },
-          409: { description: 'Policy existiert nicht oder ist eine geschuetzte Standard-Policy.' },
+          200: { description: 'Bestätigung der gelöschten Policy.', content: { 'application/json': { schema: { type: 'object', required: ['deleted'], properties: { deleted: { type: 'string' } } } } } },
+          409: { description: 'Policy existiert nicht oder ist eine geschützte Standard-Policy.' },
           ...errorResponses
         }
       }
@@ -379,8 +391,8 @@ export const openApiDocument = {
     '/api/orchestrator/v1/chat': {
       post: {
         tags: ['Orchestrator'],
-        summary: 'Sichere AI-Pipeline ausfuehren',
-        description: 'Fuehrt den Prompt gemaess Policy durch PII-, Guardrail-, Provider- und Moderationsschritte.',
+        summary: 'Sichere AI-Pipeline ausführen',
+        description: 'Führt den Prompt gemäß Policy durch PII-, Guardrail-, Provider- und Moderationsschritte.',
         requestBody: {
           required: true,
           content: {
@@ -401,13 +413,13 @@ export const openApiDocument = {
       post: {
         tags: ['Orchestrator'],
         summary: 'BPMN-Prozessentwurf aus Beschreibung erzeugen',
-        description: 'Erzeugt mit OpenAI Structured Outputs einen validierten, noch nicht gespeicherten BPMN-Entwurf. Der Graph wird auf IDs, Referenzen, Start, Ende und Erreichbarkeit geprueft; ein reparierbarer Fehler wird einmal korrigiert.',
+        description: 'Erzeugt mit OpenAI Structured Outputs einen validierten, noch nicht gespeicherten BPMN-Entwurf. Der Graph wird auf IDs, Referenzen, Start, Ende und Erreichbarkeit geprüft; ein reparierbarer Fehler wird einmal korrigiert.',
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ProcessGenerationRequest' } } }
         },
         responses: {
-          200: { description: 'Validierter Prozessentwurf mit Aktivitaeten, Flows, Lanes, Annahmen und Warnungen.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProcessDraft' } } } },
+          200: { description: 'Validierter Prozessentwurf mit Aktivitäten, Flows, Lanes, Annahmen und Warnungen.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ProcessDraft' } } } },
           ...errorResponses
         }
       }
@@ -574,18 +586,20 @@ export const openApiDocument = {
       },
       ScanRequest: {
         type: 'object',
-        required: ['tool'],
+        required: ['preset'],
         properties: {
-          tool: { type: 'string', enum: ['promptfoo', 'garak'] },
-          args: { type: 'array', maxItems: 32, default: [], items: { type: 'string' } }
+          preset: { type: 'string', enum: ['promptfoo-version', 'promptfoo-redteam-plugins', 'garak-version', 'garak-list-probes', 'garak-probe'] },
+          model: { type: 'string', description: 'Zielmodell, nur für garak-probe.', example: 'gpt-4o-mini' },
+          probe: { type: 'string', description: 'Garak-Probe, nur für garak-probe.', example: 'dan' }
         }
       },
       ScanJob: {
         type: 'object',
-        required: ['id', 'tool', 'args', 'status', 'started_at'],
+        required: ['id', 'tool', 'preset', 'args', 'status', 'started_at'],
         properties: {
           id: { type: 'string' },
           tool: { type: 'string' },
+          preset: { type: 'string' },
           args: { type: 'array', items: { type: 'string' } },
           status: { type: 'string', example: 'running' },
           started_at: { type: 'string', format: 'date-time' },

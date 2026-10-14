@@ -34,8 +34,10 @@ function startNew() {
 }
 
 function startEdit(p: Policy) {
-  isNew.value = false
-  editing.value = JSON.parse(JSON.stringify(p))
+  const copy: Policy = JSON.parse(JSON.stringify(p))
+  // Eingebaute Policies sind serverseitig schreibgeschützt und werden als Kopie bearbeitet.
+  isNew.value = p.builtin
+  editing.value = p.builtin ? { ...copy, id: '', name: `${copy.name} (Kopie)`, builtin: false } : copy
 }
 
 async function save() {
@@ -106,7 +108,7 @@ const referencedFlows = (id: string) => dataFlows.value.filter((flow) => flow.li
             <NuxtLink v-if="referencedFlows(p.id).length" to="/process-map" style="color: var(--purple); font-size: 0.75rem; display: block; margin-top: 0.2rem">Wirkt auf {{ referencedFlows(p.id).length }} Datenflüsse →</NuxtLink>
           </span>
           <span style="display: flex; gap: 0.5rem">
-            <button style="padding: 0.35rem 0.8rem" @click="startEdit(p)">Bearbeiten</button>
+            <button style="padding: 0.35rem 0.8rem" @click="startEdit(p)">{{ p.builtin ? 'Als Kopie bearbeiten' : 'Bearbeiten' }}</button>
             <button v-if="!p.builtin" style="padding: 0.35rem 0.8rem; background: var(--err)" @click="remove(p)">Löschen</button>
           </span>
         </li>

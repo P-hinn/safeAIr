@@ -21,8 +21,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     public: {
       // Überschreibbar via NUXT_PUBLIC_API_BASE
-      apiBase: 'http://localhost:8080',
-      sitePassword: ''
+      apiBase: 'http://localhost:8080'
     }
   }
 })

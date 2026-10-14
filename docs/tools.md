@@ -1,6 +1,6 @@
 # safAIr – Tool-Matrix
 
-Status-Legende: ✅ integriert & sofort nutzbar · 🔌 Adapter vorhanden, Aktivierung nötig · ◌ Roadmap · 📚 Doku/Referenz
+Status-Legende: ✅ integriert & sofort nutzbar · 🔌 Adapter vorhanden, Aktivierung nötig · 🧩 Platzhalter (Engine registriert, Anbindung offen) · ◌ Roadmap · 📚 Doku/Referenz
 
 ## PII-Erkennung & Anonymisierung (`services/pii-service`, Engine-Parameter `engine`)
 
@@ -20,9 +20,9 @@ Status-Legende: ✅ integriert & sofort nutzbar · 🔌 Adapter vorhanden, Aktiv
 |---|---|---|---|
 | safAIr Heuristik | `heuristic` | ✅ Default | – |
 | [LLM Guard](https://github.com/protectai/llm-guard) | `llm-guard` | 🔌 | `llm-guard` in requirements.txt (lädt ML-Modelle) |
-| [Guardrails AI](https://github.com/guardrails-ai/guardrails) | `guardrails-ai` | 🔌 | `guardrails-ai` installieren + Hub-Validatoren registrieren |
+| [Guardrails AI](https://github.com/guardrails-ai/guardrails) | `guardrails-ai` | 🧩 | Guard mit Hub-Validatoren noch anzubinden |
 | [NeMo Guardrails](https://docs.nvidia.com/nemo/guardrails/) | `nemo-guardrails` | 🔌 | `nemoguardrails` + `NEMO_CONFIG_PATH` (Colang-Config) + LLM-Key |
-| [OpenAI Guardrails](https://github.com/openai/openai-guardrails-python) | `openai-guardrails` | 🔌 | Paket + `OPENAI_API_KEY`; ⚠️ Namespace-Konflikt mit guardrails-ai |
+| [OpenAI Guardrails](https://github.com/openai/openai-guardrails-python) | `openai-guardrails` | 🧩 | Noch anzubinden; braucht Paket + `OPENAI_API_KEY`, ⚠️ Namespace-Konflikt mit guardrails-ai |
 | [Lakera Guard](https://www.lakera.ai/) | `lakera` | 🔌 | `LAKERA_GUARD_API_KEY` in .env |
 
 ## Content-Moderation (`services/moderation-service`)
@@ -38,19 +38,37 @@ Status-Legende: ✅ integriert & sofort nutzbar · 🔌 Adapter vorhanden, Aktiv
 | [Promptfoo](https://github.com/promptfoo/promptfoo) | ✅ im Image | Provider-Keys (`OPENAI_API_KEY`, …) in .env; Job via `POST /api/redteam/v1/scans` |
 | [Garak](https://github.com/NVIDIA/garak) | 🔌 | `garak` in requirements.txt aktivieren (großes Image) |
 
-Beispiel-Scan:
+Scans werden ausschließlich aus vordefinierten Presets gestartet (`GET /api/redteam/v1/presets`), freie CLI-Argumente sind aus Sicherheitsgründen nicht erlaubt.
+
+| Preset | Tool | Parameter |
+|---|---|---|
+| `promptfoo-version` | Promptfoo | – |
+| `promptfoo-redteam-plugins` | Promptfoo | – |
+| `garak-version` | Garak | – |
+| `garak-list-probes` | Garak | – |
+| `garak-probe` | Garak | `model` (OpenAI-Modell), `probe` (z. B. `dan`) |
+
+Beispiel-Scan (mit Session-Cookie aus dem Browser-Login):
 
 ```bash
 curl -X POST http://localhost:8080/api/redteam/v1/scans \
   -H 'Content-Type: application/json' \
-  -d '{"tool": "promptfoo", "args": ["--version"]}'
+  -b 'safair_session=…' \
+  -d '{"preset": "garak-probe", "model": "gpt-4o-mini", "probe": "dan"}'
 ```
+
+## LLM-Provider (`services/orchestrator`)
+
+| Provider | Status | Aktivierung |
+|---|---|---|
+| [Ollama](https://ollama.com/) | 🔌 | `OLLAMA_URL`; Standard-Policies nutzen `llama3.2` |
+| [OpenAI](https://platform.openai.com/) | 🔌 | `OPENAI_API_KEY`; zusätzlich Prozessgenerierung (`OPENAI_PROCESS_MODEL`) und Transkription (`OPENAI_TRANSCRIPTION_MODEL`) |
+| [Anthropic](https://docs.anthropic.com/) | 🔌 | `ANTHROPIC_API_KEY` |
 
 ## Kommerziell/Managed (Roadmap)
 
 | Tool | Einordnung |
 |---|---|
-| [Lakera Guard](https://www.lakera.ai/) | Bereits als Guardrails-Engine angebunden (API-Key) |
 | [Protecto](https://www.protecto.ai/) | ◌ Adapter geplant (API-Zugang erforderlich) |
 
 ## Hintergrund-Artikel 📚

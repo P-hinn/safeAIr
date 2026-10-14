@@ -2,7 +2,7 @@
 FROM nikolaik/python-nodejs:python3.12-nodejs22-slim
 
 # Promptfoo global installieren (großes Paket – Fortschritt sichtbar halten)
-RUN npm install -g promptfoo --loglevel=info --no-audit --no-fund
+RUN npm install -g promptfoo@0.124.1 --loglevel=info --no-audit --no-fund
 
 WORKDIR /app
 

@@ -31,7 +31,7 @@ SUPPORTED_AUDIO_TYPES = {"audio/webm", "audio/mp4", "video/webm", "video/mp4"}
 
 
 class ChatMessage(BaseModel):
-    role: str = Field(pattern="^(user|assistant|system)$")
+    role: str = Field(pattern="^(user|assistant)$")
     content: str
 
 
@@ -70,8 +70,14 @@ def create_policy(req: PolicyRequest):
 
 @app.put("/v1/policies/{policy_id}")
 def update_policy(policy_id: str, req: PolicyRequest):
-    if db.get_policy(policy_id) is None:
+    policy = db.get_policy(policy_id)
+    if policy is None:
         raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": f"Policy {policy_id} unbekannt"}})
+    if policy["builtin"]:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": {"code": "builtin_policy", "message": "Eingebaute Policies sind schreibgeschützt. Bitte als neue Policy speichern."}},
+        )
     return db.save_policy(req.name, req.config, policy_id)
 
 
